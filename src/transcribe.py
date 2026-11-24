@@ -70,7 +70,7 @@ def transcribe_window(audio: Path, offset: float) -> list[dict]:
 
 
 def transcribe_candidate(video_id: str, audio: Path, t: int, pad: int = 60) -> list[dict]:
-    cache = work_dir(video_id) / f"transcript_{t}.json"
+    cache = work_dir(video_id) / f"transcript_{t}_{pad}.json"
     if cache.exists():
         return json.loads(cache.read_text(encoding="utf-8"))
     start = max(t - pad, 0)
