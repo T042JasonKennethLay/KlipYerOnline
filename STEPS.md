@@ -21,7 +21,7 @@ Hal yang lebih berat (Twitch chat, LLM, VLM, Rust, K8s) baru disentuh **setelah 
 | 6 | Render 9:16 (center crop) | ✅ |
 | 7 | Transkrip kandidat (timestamp per kata) | ✅ |
 | 8 | Snap ke batas kalimat | ✅ |
-| 9 | Caption karaoke (.ass) + render | ⬜ |
+| 9 | Caption karaoke (.ass) + render | ✅ |
 | 10 | Layout facecam + gameplay | ⬜ |
 | 11 | `pipeline.py`: semua jadi satu perintah | ⬜ |
 
@@ -251,3 +251,4 @@ Isi tiap kali selesai satu step, biar kelihatan progresnya.
 | 2026-11-24 | fix | `AHtPn8fmJ2Y`, `sqWUDQloQm8` | ✅ | baseline lonjakan tidak lagi ikut detik hening (break/mute). Kandidat palsu di menit 50 sampai 85 Jynxzi hilang. Dicek pakai transkrip: 4:04:40 ada reaksi, 2:37 (catur) dan 3:54 (iklan game) kurang menarik, butuh LLM refine nanti |
 | 2026-11-24 | 8 | `AHtPn8fmJ2Y` t=4:04:40, `sqWUDQloQm8` t=12:24 | ✅ | clip 43.1 s dan 51.2 s, mulai di awal kalimat, selesai di akhir kalimat. Dites juga dengan data palsu: kosong, kalimat sangat panjang, terlalu pendek |
 | 2026-11-24 | fix | `AHtPn8fmJ2Y` | ✅ | download section Jynxzi macet / ffmpeg crash karena yt-dlp tidak punya JS runtime (YouTube throttle). Aktifkan node + `yt-dlp[default]` (yt-dlp-ejs): 43 s 1080p60 selesai 44 s |
+| 2026-11-24 | 9 | `AHtPn8fmJ2Y` t=4:04:40 | ✅ | 46 kata, Montserrat ExtraBold, kata aktif kuning + pop, chunk baru kalau jeda > 1 s. Render 43 s dalam 6 s. Path ass dibuat relatif (cwd) supaya aman di Windows |
