@@ -222,7 +222,9 @@ python -m src.pipeline "<link>" --top 3
 Urutan yang disarankan, masing-masing jadi step kecil sendiri:
 
 1. **Twitch:** chat replay → sinyal chat (+ geser ~5 detik karena chat telat)
-2. **LLM refine:** batas clip + skor + judul (output JSON, ada fallback kalau gagal)
+2. ✅ **LLM refine:** batas clip + skor + judul (output JSON, ada fallback heuristik kalau belum ada API key)
+   - ✅ **Render dari stream:** tanpa download potongan video, encode sekali
+   - ✅ **Efek:** boom + zoom di punchline, judul hook, lagu latar dengan ducking
 3. **Eval:** golden set kecil + `precision@k`, supaya perubahan dinilai pakai angka, bukan feeling
 4. **Deteksi tawa/teriak:** YAMNet, lebih akurat dari loudness saja
 5. **Momen hening:** quiet anomaly + motion + VLM
@@ -255,3 +257,6 @@ Isi tiap kali selesai satu step, biar kelihatan progresnya.
 | 2026-11-24 | 10 | `AHtPn8fmJ2Y` (facecam kanan bawah), `sqWUDQloQm8` (tanpa facecam) | ✅ | YuNet 30/30 frame kena, wajah 191x240. Kotak awal (3.2x wajah) kebesaran, diganti 1.6x tinggi wajah: (1272, 580, 646, 382). Gameplay digeser menjauhi facecam. SMii7Y benar terdeteksi None, jadi center crop. Preset `presets/jynxzi.json` |
 | 2026-11-24 | 11 | `AHtPn8fmJ2Y` --top 3 | ✅ | 3 clip layout facecam (preset Jynxzi) dalam 148 s: 5:35:26 (49 s), 4:04:29 (28 s), 2:36:57 (38 s, catur). Momen hening (< 0.5 kata/s) dilewati |
 | 2026-11-24 | 11 | `sqWUDQloQm8` --top 2 | ✅ | 2 clip center crop (tanpa facecam) dalam 104 s. **MVP Phase 1 selesai** |
+| 2026-11-24 | refine | `AHtPn8fmJ2Y` --top 3 | ✅ | Belum ada API key, jadi jalur heuristik: panjang clip ikut isi (32 s, 14 s, 15 s), bukan rata 30 s+. Momen "Bitched, bitched" sebelumnya kebuang sebagai hening (26 kata/60 s), batas hening diturunkan ke 0.25 kata/s. Jalur Claude dites pakai jawaban tiruan, belum dengan API asli |
+| 2026-11-24 | stream | `AHtPn8fmJ2Y` --top 3 | ✅ | Downloader potongan yt-dlp gagal lagi (ffmpeg exit 2812791304). Link HTTPS langsung juga 403 untuk ffmpeg, HLS selalu 206. Video dari HLS (H.264), audio dari file lokal. Render per clip 4 sampai 12 s, tanpa file raw. Frame dicek sama dengan hasil download lama |
+| 2026-11-24 | fx | `AHtPn8fmJ2Y` t=4:04:43 | ✅ | Judul kotak putih 3 s, zoom 14% di punchline, boom terdengar (puncak -4 dB vs -22 dB di sekitarnya). Lagu dummy di-loop + ducking, durasi audio = video |
