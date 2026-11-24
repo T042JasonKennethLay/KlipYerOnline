@@ -5,3 +5,4 @@ matplotlib>=3.9
 faster-whisper>=1.2
 nvidia-cublas-cu12>=12.4
 nvidia-cudnn-cu12>=9,<10
+opencv-python-headless>=4.10
