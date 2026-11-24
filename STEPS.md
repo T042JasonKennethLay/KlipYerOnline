@@ -19,7 +19,7 @@ Hal yang lebih berat (Twitch chat, LLM, VLM, Rust, K8s) baru disentuh **setelah 
 | 4 | Gabung sinyal → top momen | ✅ |
 | 5 | Download potongan video (section) | ✅ |
 | 6 | Render 9:16 (center crop) | ✅ |
-| 7 | Transkrip kandidat (timestamp per kata) | ⬜ |
+| 7 | Transkrip kandidat (timestamp per kata) | ✅ |
 | 8 | Snap ke batas kalimat | ⬜ |
 | 9 | Caption karaoke (.ass) + render | ⬜ |
 | 10 | Layout facecam + gameplay | ⬜ |
@@ -247,3 +247,4 @@ Isi tiap kali selesai satu step, biar kelihatan progresnya.
 | 2026-11-24 | 4 | `cbHDLQhCnkM` | ✅ | fallback audio saja jalan. Kena/tidak perlu dicek manual |
 | 2026-11-24 | 5 | `sqWUDQloQm8` 1:46:59 - 1:47:39 | ✅ | durasi pas 40.000 s, 1080p60, 15 MB, 35 detik. Frame awal tidak hitam. VOD ini tanpa facecam |
 | 2026-11-24 | 6 | `sqWUDQloQm8` | ✅ | 1080x1920 30fps + aac, NVENC: render 40 s dalam 6 s |
+| 2026-11-24 | 7 | `AHtPn8fmJ2Y` t=1:21:44 | ✅ | large-v3-turbo int8 di RTX 3050: window 120 s dalam 7.4 s. Teks dan timestamp akurat. Model di-download manual ke `models/` (download HF Xet macet). Audio di-decode pakai ffmpeg karena PyAV tidak cocok. Temuan: kandidat ini 67/120 detik hening, isinya obrolan biasa |

@@ -17,7 +17,7 @@ work/
 out/
 
 # Model & media besar
-models/*.onnx
+models/
 *.mp4
 *.m4a
 *.webm
