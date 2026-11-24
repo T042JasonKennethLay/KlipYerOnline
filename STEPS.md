@@ -16,7 +16,7 @@ Hal yang lebih berat (Twitch chat, LLM, VLM, Rust, K8s) baru disentuh **setelah 
 | 1 | Ambil metadata + heatmap dari link | ✅ |
 | 2 | Download audio saja | ✅ |
 | 3 | Loudness per detik + grafik | ✅ |
-| 4 | Gabung sinyal → top momen | ⬜ |
+| 4 | Gabung sinyal → top momen | ✅ |
 | 5 | Download potongan video (section) | ⬜ |
 | 6 | Render 9:16 (center crop) | ⬜ |
 | 7 | Transkrip kandidat (timestamp per kata) | ⬜ |
@@ -243,3 +243,5 @@ Isi tiap kali selesai satu step, biar kelihatan progresnya.
 | 2026-11-24 | 1 | `KoX-RdIKZIs` (VOD 1 jam, 11 views) | ✅ | heatmap kosong (normal) |
 | 2026-11-24 | 2 | `sqWUDQloQm8` | ✅ | audio m4a 183 MB, durasi 11860 s sama dengan metadata, download 2 menit |
 | 2026-11-24 | 3 | `sqWUDQloQm8` | ✅ | loudness mentah numpuk di akhir stream (bagian akhir lebih keras). Diganti lonjakan relatif vs median 5 menit, puncak jelas di 1:47:33 (+20 dB). Heatmap condong ke awal video. Cek manual link puncak oleh user |
+| 2026-11-24 | 4 | `sqWUDQloQm8` | ✅ | top 5: 0:12:39, 1:47:34, 0:42:41, 0:22:10, 2:05:24. Heatmap di-detrend (median 15 menit) biar tidak condong ke awal |
+| 2026-11-24 | 4 | `cbHDLQhCnkM` | ✅ | fallback audio saja jalan. Kena/tidak perlu dicek manual |
