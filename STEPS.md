@@ -18,7 +18,7 @@ Hal yang lebih berat (Twitch chat, LLM, VLM, Rust, K8s) baru disentuh **setelah 
 | 3 | Loudness per detik + grafik | ✅ |
 | 4 | Gabung sinyal → top momen | ✅ |
 | 5 | Download potongan video (section) | ✅ |
-| 6 | Render 9:16 (center crop) | ⬜ |
+| 6 | Render 9:16 (center crop) | ✅ |
 | 7 | Transkrip kandidat (timestamp per kata) | ⬜ |
 | 8 | Snap ke batas kalimat | ⬜ |
 | 9 | Caption karaoke (.ass) + render | ⬜ |
@@ -246,3 +246,4 @@ Isi tiap kali selesai satu step, biar kelihatan progresnya.
 | 2026-11-24 | 4 | `sqWUDQloQm8` | ✅ | top 5: 0:12:39, 1:47:34, 0:42:41, 0:22:10, 2:05:24. Heatmap di-detrend (median 15 menit) biar tidak condong ke awal |
 | 2026-11-24 | 4 | `cbHDLQhCnkM` | ✅ | fallback audio saja jalan. Kena/tidak perlu dicek manual |
 | 2026-11-24 | 5 | `sqWUDQloQm8` 1:46:59 - 1:47:39 | ✅ | durasi pas 40.000 s, 1080p60, 15 MB, 35 detik. Frame awal tidak hitam. VOD ini tanpa facecam |
+| 2026-11-24 | 6 | `sqWUDQloQm8` | ✅ | 1080x1920 30fps + aac, NVENC: render 40 s dalam 6 s |
