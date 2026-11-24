@@ -17,7 +17,7 @@ Hal yang lebih berat (Twitch chat, LLM, VLM, Rust, K8s) baru disentuh **setelah 
 | 2 | Download audio saja | ✅ |
 | 3 | Loudness per detik + grafik | ✅ |
 | 4 | Gabung sinyal → top momen | ✅ |
-| 5 | Download potongan video (section) | ⬜ |
+| 5 | Download potongan video (section) | ✅ |
 | 6 | Render 9:16 (center crop) | ⬜ |
 | 7 | Transkrip kandidat (timestamp per kata) | ⬜ |
 | 8 | Snap ke batas kalimat | ⬜ |
@@ -245,3 +245,4 @@ Isi tiap kali selesai satu step, biar kelihatan progresnya.
 | 2026-11-24 | 3 | `sqWUDQloQm8` | ✅ | loudness mentah numpuk di akhir stream (bagian akhir lebih keras). Diganti lonjakan relatif vs median 5 menit, puncak jelas di 1:47:33 (+20 dB). Heatmap condong ke awal video. Cek manual link puncak oleh user |
 | 2026-11-24 | 4 | `sqWUDQloQm8` | ✅ | top 5: 0:12:39, 1:47:34, 0:42:41, 0:22:10, 2:05:24. Heatmap di-detrend (median 15 menit) biar tidak condong ke awal |
 | 2026-11-24 | 4 | `cbHDLQhCnkM` | ✅ | fallback audio saja jalan. Kena/tidak perlu dicek manual |
+| 2026-11-24 | 5 | `sqWUDQloQm8` 1:46:59 - 1:47:39 | ✅ | durasi pas 40.000 s, 1080p60, 15 MB, 35 detik. Frame awal tidak hitam. VOD ini tanpa facecam |
