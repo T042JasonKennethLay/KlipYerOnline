@@ -29,16 +29,22 @@ def loudness_per_second(audio_path: Path, sr: int = SR) -> np.ndarray:
     return np.array(out)
 
 
-def loudness_spike(loud_db: np.ndarray, floor: float = -60.0, short: int = 5, base: int = 300) -> np.ndarray:
+def loudness_spike(loud_db: np.ndarray, floor: float = -60.0, short: int = 5, base: int = 300,
+                   silence_db: float = -50.0, margin: float = 6.0) -> np.ndarray:
     """Seberapa keras detik ini dibanding `base` detik di sekitarnya (dB di atas median lokal).
 
     Stream gaming hampir selalu keras, jadi yang dicari lonjakan relatif, bukan volume absolut.
+    Detik hening (break, mute) tidak ikut menghitung baseline. Kalau ikut, baseline jadi rendah
+    dan obrolan biasa setelah hening terlihat seperti lonjakan besar.
     """
     from scipy.ndimage import median_filter, uniform_filter1d
 
     x = np.maximum(loud_db, floor)
+    voiced = x > silence_db
+    ref = float(np.median(x[voiced])) if voiced.any() else float(np.median(x))
+    filled = np.where(voiced, x, ref)
     short_avg = uniform_filter1d(x, size=short, mode="nearest")
-    baseline = median_filter(x, size=base, mode="nearest")
+    baseline = np.maximum(median_filter(filled, size=base, mode="nearest"), ref - margin)
     return np.maximum(short_avg - baseline, 0)
 
 
