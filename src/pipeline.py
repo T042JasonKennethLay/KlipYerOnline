@@ -2,16 +2,19 @@
 
     python -m src.pipeline "<url>" --top 3
 
-Semua tahap pakai cache di work/<id>/, jadi kalau ada yang gagal tinggal jalankan ulang.
+Video tidak diunduh: ffmpeg membaca potongan langsung dari stream YouTube (HLS) dan audio dari
+file audio lokal. Semua tahap pakai cache di work/<id>/, jadi kalau ada yang gagal tinggal jalankan ulang.
 """
 import argparse
 import json
+import subprocess
 import time
 import warnings
 
 from src.boundaries import words_in
 from src.captions import build_ass
-from src.ingest import download_audio, download_section, load_or_fetch_metadata
+from src.ingest import (StreamSource, download_audio, download_section, grab_probe, load_or_fetch_metadata,
+                        stream_source)
 from src.paths import out_dir, work_dir
 from src.reframe import preset_or_detect
 from src.refine import refine
@@ -21,6 +24,7 @@ from src.transcribe import transcribe_candidate
 
 MIN_WORDS_PER_SEC = 0.25         # kata/detik di sekitar puncak; di bawah ini = momen hening (butuh VLM, belum ada)
 CAPTION_Y = {"cam": 790, "center": 1180}
+STREAM_TRIES = 3
 
 
 def fmt(s: float) -> str:
@@ -57,21 +61,51 @@ def plan_clips(meta: dict, top: int, pool: int | None = None) -> list[dict]:
     return plans
 
 
-def render_clip(meta: dict, plan: dict, idx: int, cam_cache: dict) -> dict:
+def facecam(meta: dict, src, s: float, cam_cache: dict):
+    """Preset channel kalau ada, kalau tidak deteksi sekali per video dari potongan 20 detik."""
+    if "box" not in cam_cache:
+        from src.reframe import load_preset
+        if load_preset(meta["channel"]):
+            probe = None
+        elif isinstance(src, StreamSource):
+            probe = grab_probe(src, s, work_dir(meta["id"]) / f"probe_{int(s)}.mp4")
+        else:
+            probe = src
+        cam_cache["box"], cam_cache["src"] = preset_or_detect(probe, meta["channel"])
+        log(f"facecam: {cam_cache['box']} ({cam_cache['src']})")
+    return cam_cache["box"]
+
+
+def render_clip(meta: dict, plan: dict, idx: int, cam_cache: dict, audio) -> dict:
     vid = meta["id"]
     s, e = plan["start"], plan["end"]
-    raw = download_section(meta["url"], vid, s, e, f"raw_{int(s * 100)}_{int(e * 100)}")
-    if "box" not in cam_cache:
-        cam_cache["box"], cam_cache["src"] = preset_or_detect(raw, meta["channel"])
-        log(f"facecam: {cam_cache['box']} ({cam_cache['src']})")
-    box = cam_cache["box"]
-    layout = "cam" if box else "center"
-    ass = build_ass(plan["words"], s, e, work_dir(vid) / f"cap_{int(s * 100)}.ass", pos=(540, CAPTION_Y[layout]))
     out = out_dir(vid) / f"clip_{idx:02d}_{int(s)}.mp4"
-    render_vertical(raw, out, ass, box)
+    cap = work_dir(vid) / f"cap_{int(s * 100)}.ass"
+
+    def render(src, offset: float) -> None:
+        box = facecam(meta, src, s, cam_cache)
+        layout = "cam" if box else "center"
+        build_ass(plan["words"], s, e, cap, pos=(540, CAPTION_Y[layout]))
+        if isinstance(src, StreamSource):
+            render_vertical(src, out, cap, box, s, e)
+        else:
+            render_vertical(src, out, cap, box)
+
+    for attempt in range(STREAM_TRIES):
+        try:
+            render(stream_source(meta["url"], audio, refresh=attempt > 0), s)
+            how = "stream"
+            break
+        except subprocess.CalledProcessError:
+            log(f"  stream gagal (percobaan {attempt + 1}/{STREAM_TRIES}), ambil link baru")
+    else:
+        log("  fallback: download potongan dulu")
+        render(download_section(meta["url"], vid, s, e, f"raw_{int(s * 100)}_{int(e * 100)}"), 0)
+        how = "download"
+    layout = "cam" if cam_cache.get("box") else "center"
     return {"file": str(out.name), "start": s, "end": e, "duration": round(e - s, 2), "score": plan["score"],
             "layout": layout, "title": plan["title"], "punchline": plan["punchline"], "reason": plan["reason"],
-            "link": f"https://youtu.be/{vid}?t={int(s)}", "text": plan["text"]}
+            "source": how, "link": f"https://youtu.be/{vid}?t={int(s)}", "text": plan["text"]}
 
 
 def run(url: str, top: int = 3, pool: int | None = None) -> list[dict]:
@@ -79,11 +113,14 @@ def run(url: str, top: int = 3, pool: int | None = None) -> list[dict]:
     meta = load_or_fetch_metadata(url)
     log(f"{meta['title']} ({meta['channel']}, {fmt(meta['duration'])})")
     plans = plan_clips(meta, top, pool)
+    audio = download_audio(meta["url"], meta["id"])
     cam_cache: dict = {}
     clips = []
     for i, p in enumerate(plans, 1):
-        log(f"render clip {i}/{len(plans)}: {fmt(p['start'])}-{fmt(p['end'])}")
-        clips.append(render_clip(meta, p, i, cam_cache))
+        t = time.time()
+        clips.append(render_clip(meta, p, i, cam_cache, audio))
+        log(f"render clip {i}/{len(plans)}: {fmt(p['start'])}-{fmt(p['end'])} "
+            f"via {clips[-1]['source']} ({time.time() - t:.0f} s)")
     summary = out_dir(meta["id"]) / "clips.json"
     summary.write_text(json.dumps({"video": meta["id"], "title": meta["title"], "clips": clips},
                                   ensure_ascii=False, indent=2), encoding="utf-8")
