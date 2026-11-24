@@ -7,9 +7,10 @@ from scipy.signal import find_peaks
 
 from src.ingest import download_audio, load_or_fetch_metadata
 from src.paths import work_dir
-from src.signals import heatmap_per_second, load_or_compute_loudness, loudness_spike
+from src.signals import load_or_compute_loudness, loudness_spike
+from src.viewers import get_viewer_signal
 
-WEIGHTS = {"heatmap": 0.6, "audio": 0.4}
+WEIGHTS = {"viewers": 0.6, "audio": 0.4}
 EDGE_SKIP = 60
 
 
@@ -50,10 +51,9 @@ def top_moments(score: np.ndarray, k: int = 5, min_gap: int = 90) -> list[int]:
 def build_signals(meta: dict) -> dict[str, np.ndarray | None]:
     audio = download_audio(meta["url"], meta["id"])
     loud = load_or_compute_loudness(audio)
-    heat = None
-    if meta["heatmap"]:
-        heat = detrend_heatmap(heatmap_per_second(meta["heatmap"], meta["duration"]))
-    return {"heatmap": heat, "audio": loudness_spike(loud)}
+    viewers = get_viewer_signal(meta)
+    heat = detrend_heatmap(viewers.per_second) if viewers else None
+    return {"viewers": heat, "audio": loudness_spike(loud)}
 
 
 def find_candidates(meta: dict, k: int = 5) -> list[dict]:
@@ -78,7 +78,8 @@ def main(argv: list[str]) -> None:
     meta = load_or_fetch_metadata(argv[1])
     k = int(argv[2]) if len(argv) > 2 else 5
     cands = find_candidates(meta, k)
-    print(f"sinyal    : {'heatmap + audio' if meta['heatmap'] else 'audio saja'}")
+    used = json.loads((work_dir(meta["id"]) / "candidates.json").read_text())["signals"]
+    print(f"sinyal    : {' + '.join(used)}")
     print(f"top {k} kandidat:")
     for i, c in enumerate(sorted(cands, key=lambda c: -c["score"]), 1):
         print(f"  {i}. {fmt(c['t'])}  skor {c['score']:+.2f}  https://youtu.be/{meta['id']}?t={max(c['t'] - 15, 0)}")
