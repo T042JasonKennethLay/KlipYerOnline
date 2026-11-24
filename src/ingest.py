@@ -2,6 +2,7 @@ import json
 import sys
 
 import yt_dlp
+from yt_dlp.utils import download_range_func
 
 from src.paths import work_dir
 
@@ -49,6 +50,25 @@ def download_audio(url: str, video_id: str):
     with yt_dlp.YoutubeDL(opts) as ydl:
         ydl.download([url])
     return find_audio(video_id)
+
+
+def download_section(url: str, video_id: str, start: float, end: float, name: str, max_height: int = 1080):
+    """Download HANYA potongan [start, end] detik, bukan full video."""
+    out = work_dir(video_id) / f"{name}.mp4"
+    if out.exists():
+        return out
+    opts = {
+        **YDL_BASE,
+        "format": f"bv*[height<={max_height}][ext=mp4]+ba[ext=m4a]/bv*[height<={max_height}]+ba/b[height<={max_height}]",
+        "outtmpl": str(work_dir(video_id) / f"{name}.%(ext)s"),
+        "download_ranges": download_range_func(None, [(start, end)]),
+        "force_keyframes_at_cuts": True,
+        "merge_output_format": "mp4",
+        "noprogress": True,
+    }
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        ydl.download([url])
+    return out
 
 
 def main(argv: list[str]) -> None:
