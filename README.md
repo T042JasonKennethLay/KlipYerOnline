@@ -19,6 +19,7 @@ AI auto-clipper: kasih link video (YouTube / Twitch VOD), keluar clip vertikal 9
 
 - [Design doc](AI_Auto_Clipper_Design_Doc.md)
 - [Step by step testing](STEPS.md)
+- [Pembagian tugas](TEAM.md)
 
 ## Status
 
