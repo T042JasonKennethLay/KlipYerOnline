@@ -1,4 +1,4 @@
-yt-dlp>=2026.11.23
+yt-dlp[default]>=2026.11.23
 numpy>=2.0
 scipy>=1.13
 matplotlib>=3.9
