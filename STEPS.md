@@ -14,7 +14,7 @@ Hal yang lebih berat (Twitch chat, LLM, VLM, Rust, K8s) baru disentuh **setelah 
 |---|---|---|
 | 0 | Setup environment | ✅ |
 | 1 | Ambil metadata + heatmap dari link | ✅ |
-| 2 | Download audio saja | ⬜ |
+| 2 | Download audio saja | ✅ |
 | 3 | Loudness per detik + grafik | ⬜ |
 | 4 | Gabung sinyal → top momen | ⬜ |
 | 5 | Download potongan video (section) | ⬜ |
@@ -241,3 +241,4 @@ Isi tiap kali selesai satu step, biar kelihatan progresnya.
 | 2026-11-24 | 1 | `sqWUDQloQm8` (VOD 3j17m, 1jt views) | ✅ | heatmap 100 titik |
 | 2026-11-24 | 1 | `cbHDLQhCnkM` (26 menit, 200rb views) | ✅ | heatmap kosong, padahal views lumayan |
 | 2026-11-24 | 1 | `KoX-RdIKZIs` (VOD 1 jam, 11 views) | ✅ | heatmap kosong (normal) |
+| 2026-11-24 | 2 | `sqWUDQloQm8` | ✅ | audio m4a 183 MB, durasi 11860 s sama dengan metadata, download 2 menit |
