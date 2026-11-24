@@ -23,7 +23,7 @@ Hal yang lebih berat (Twitch chat, LLM, VLM, Rust, K8s) baru disentuh **setelah 
 | 8 | Snap ke batas kalimat | ✅ |
 | 9 | Caption karaoke (.ass) + render | ✅ |
 | 10 | Layout facecam + gameplay | ✅ |
-| 11 | `pipeline.py`: semua jadi satu perintah | ⬜ |
+| 11 | `pipeline.py`: semua jadi satu perintah | ✅ |
 
 Status: ⬜ belum · 🟨 lagi dikerjain · ✅ lulus
 
@@ -253,3 +253,5 @@ Isi tiap kali selesai satu step, biar kelihatan progresnya.
 | 2026-11-24 | fix | `AHtPn8fmJ2Y` | ✅ | download section Jynxzi macet / ffmpeg crash karena yt-dlp tidak punya JS runtime (YouTube throttle). Aktifkan node + `yt-dlp[default]` (yt-dlp-ejs): 43 s 1080p60 selesai 44 s |
 | 2026-11-24 | 9 | `AHtPn8fmJ2Y` t=4:04:40 | ✅ | 46 kata, Montserrat ExtraBold, kata aktif kuning + pop, chunk baru kalau jeda > 1 s. Render 43 s dalam 6 s. Path ass dibuat relatif (cwd) supaya aman di Windows |
 | 2026-11-24 | 10 | `AHtPn8fmJ2Y` (facecam kanan bawah), `sqWUDQloQm8` (tanpa facecam) | ✅ | YuNet 30/30 frame kena, wajah 191x240. Kotak awal (3.2x wajah) kebesaran, diganti 1.6x tinggi wajah: (1272, 580, 646, 382). Gameplay digeser menjauhi facecam. SMii7Y benar terdeteksi None, jadi center crop. Preset `presets/jynxzi.json` |
+| 2026-11-24 | 11 | `AHtPn8fmJ2Y` --top 3 | ✅ | 3 clip layout facecam (preset Jynxzi) dalam 148 s: 5:35:26 (49 s), 4:04:29 (28 s), 2:36:57 (38 s, catur). Momen hening (< 0.5 kata/s) dilewati |
+| 2026-11-24 | 11 | `sqWUDQloQm8` --top 2 | ✅ | 2 clip center crop (tanpa facecam) dalam 104 s. **MVP Phase 1 selesai** |
