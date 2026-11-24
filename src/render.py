@@ -40,7 +40,9 @@ def game_crop_x(src_w: int, src_h: int, cam_box: tuple[int, int, int, int]) -> i
 
 
 def build_filter(ass: Path | None = None, cwd: Path | None = None,
-                 cam_box: tuple[int, int, int, int] | None = None, src_size: tuple[int, int] | None = None) -> str:
+                 cam_box: tuple[int, int, int, int] | None = None, src_size: tuple[int, int] | None = None,
+                 zoom: str = "") -> str:
+    """zoom: potongan filter tambahan setelah layout dan sebelum caption (lihat src.fx.zoom_filter)."""
     if cam_box and src_size:
         x, y, w, h = cam_box
         gx = game_crop_x(*src_size, cam_box)
@@ -50,10 +52,14 @@ def build_filter(ass: Path | None = None, cwd: Path | None = None,
               f"[cam][game]vstack=inputs=2[stack]")
     else:
         fc = f"[0:v]crop=ih*9/16:ih,scale={W}:{H},setsar=1[stack]"
+    last = "stack"
+    if zoom:
+        fc += f";[stack]fps=30{zoom}[zoomed]"
+        last = "zoomed"
     if ass:
-        fc += f";[stack]ass={rel(ass, cwd)}:fontsdir={rel(FONTS, cwd)}[out]"
+        fc += f";[{last}]ass={rel(ass, cwd)}:fontsdir={rel(FONTS, cwd)}[out]"
     else:
-        fc += ";[stack]null[out]"
+        fc += f";[{last}]null[out]"
     return fc
 
 
@@ -67,8 +73,11 @@ def video_size(src: Path) -> tuple[int, int]:
 
 def render_vertical(src, out: Path, ass: Path | None = None,
                     cam_box: tuple[int, int, int, int] | None = None,
-                    start: float = 0.0, end: float | None = None) -> Path:
-    """src: file lokal (Path) atau StreamSource (link langsung, butuh start dan end)."""
+                    start: float = 0.0, end: float | None = None, fx: dict | None = None) -> Path:
+    """src: file lokal (Path) atau StreamSource (link langsung, butuh start dan end).
+
+    fx: {"punch": detik relatif atau None, "seed": int, "music": bool} untuk SFX, zoom, dan lagu.
+    """
     out.parent.mkdir(parents=True, exist_ok=True)
     if isinstance(src, Path):
         inputs, amap = ["-i", str(src.resolve())], "0:a?"
@@ -78,7 +87,21 @@ def render_vertical(src, out: Path, ass: Path | None = None,
         inputs, amap = src.input_args(start, end - start), src.audio_label
         size = (src.width, src.height)
         cwd = (ass or out).resolve().parent
-    fc = build_filter(ass.resolve() if ass else None, cwd, cam_box, size if cam_box else None)
+    zoom = ""
+    if fx:
+        from src.fx import audio_plan, zoom_filter
+        zoom = zoom_filter(fx.get("punch"))
+    fc = build_filter(ass.resolve() if ass else None, cwd, cam_box, size if cam_box else None, zoom)
+    if fx:
+        voice = amap.rstrip("?")
+        first = inputs.count("-i")
+        dur = (end - start) if end is not None else float(subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(src)],
+            capture_output=True, text=True).stdout or 0)
+        extra, afilter = audio_plan(voice, first, fx.get("punch"), dur, fx.get("seed", 0), fx.get("music", True))
+        inputs = [*inputs, *extra]
+        fc += ";" + afilter
+        amap = "[aout]"
     cmd = ["ffmpeg", "-y", "-v", "error", *inputs,
            "-filter_complex", fc,
            "-map", "[out]", "-map", amap, *video_encoder(), "-r", "30",

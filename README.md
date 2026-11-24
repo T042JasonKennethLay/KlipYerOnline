@@ -5,15 +5,18 @@ AI auto-clipper: kasih link video YouTube, keluar clip vertikal 9:16 yang siap u
 ## Fitur
 
 - Cari momen menarik dari heatmap "Most Replayed" dan lonjakan suara
-- Download hanya potongan video yang dipakai, bukan full video
+- Claude menyaring kandidat yang membosankan, memotong dari hook sampai punchline, dan membuat judul
+- Video tidak diunduh: ffmpeg baca potongan langsung dari stream YouTube
 - Transkrip per kata (faster-whisper, GPU) untuk caption karaoke
-- Batas clip di-snap ke awal dan akhir kalimat
+- Panjang clip mengikuti isi (reaksi cepat sekitar 10 detik, cerita sampai 60 detik)
+- Efek gaya clipper: boom + zoom di punchline, judul hook, lagu latar yang mengecil saat streamer ngomong
 - Deteksi facecam otomatis (YuNet) + preset per channel
 - Render 9:16: facecam di atas, gameplay di bawah, atau center crop kalau tidak ada facecam
 
 ## Tech stack
 
 - Python 3.12, yt-dlp, numpy, scipy
+- Claude API (anthropic SDK) untuk memilih dan memotong clip
 - faster-whisper (large-v3-turbo), OpenCV
 - ffmpeg (NVENC kalau ada GPU NVIDIA)
 
@@ -31,6 +34,15 @@ python -m src.pipeline "https://www.youtube.com/watch?v=<id>" --top 3
 
 Hasilnya ada di `out/<id>/` beserta `clips.json`.
 
+Opsi:
+
+- `--effects all|sfx|none`: semua efek (default), tanpa lagu, atau polos
+- `--pool N`: jumlah kandidat yang ditranskrip (default top x 3)
+
+Supaya clip dipilih Claude, salin `.env.example` jadi `.env` lalu isi `ANTHROPIC_API_KEY`. Tanpa key, pipeline tetap jalan dengan pemilihan heuristik.
+
+Lagu dan SFX sendiri ditaruh di `assets/`, lihat [assets/README.md](assets/README.md).
+
 Model whisper di-download otomatis saat pertama jalan. Kalau download dari Hugging Face macet, taruh model manual di `models/faster-whisper-large-v3-turbo/`.
 
 ## Dokumen
@@ -41,4 +53,4 @@ Model whisper di-download otomatis saat pertama jalan. Kalau download dari Huggi
 
 ## Status
 
-MVP Phase 1 selesai (Step 0 sampai 11). Berikutnya: LLM refine, chat Twitch, eval.
+MVP Phase 1 selesai (Step 0 sampai 11), ditambah LLM refine, render dari stream, dan efek. Berikutnya: chat Twitch, eval.

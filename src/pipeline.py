@@ -24,6 +24,7 @@ from src.transcribe import transcribe_candidate
 
 MIN_WORDS_PER_SEC = 0.25         # kata/detik di sekitar puncak; di bawah ini = momen hening (butuh VLM, belum ada)
 CAPTION_Y = {"cam": 790, "center": 1180}
+TITLE_Y = {"cam": 60, "center": 260}
 STREAM_TRIES = 3
 
 
@@ -76,7 +77,8 @@ def facecam(meta: dict, src, s: float, cam_cache: dict):
     return cam_cache["box"]
 
 
-def render_clip(meta: dict, plan: dict, idx: int, cam_cache: dict, audio) -> dict:
+def render_clip(meta: dict, plan: dict, idx: int, cam_cache: dict, audio, effects: str = "all") -> dict:
+    """effects: "all" (SFX + zoom + lagu), "sfx" (tanpa lagu), atau "none"."""
     vid = meta["id"]
     s, e = plan["start"], plan["end"]
     out = out_dir(vid) / f"clip_{idx:02d}_{int(s)}.mp4"
@@ -85,11 +87,16 @@ def render_clip(meta: dict, plan: dict, idx: int, cam_cache: dict, audio) -> dic
     def render(src, offset: float) -> None:
         box = facecam(meta, src, s, cam_cache)
         layout = "cam" if box else "center"
-        build_ass(plan["words"], s, e, cap, pos=(540, CAPTION_Y[layout]))
+        build_ass(plan["words"], s, e, cap, pos=(540, CAPTION_Y[layout]), title=plan.get("title", ""),
+                  title_y=TITLE_Y[layout])
+        punch = plan.get("punchline")
+        fx = None if effects == "none" else {
+            "punch": punch - s if punch is not None and s <= punch <= e else None,
+            "seed": int(s), "music": effects == "all"}
         if isinstance(src, StreamSource):
-            render_vertical(src, out, cap, box, s, e)
+            render_vertical(src, out, cap, box, s, e, fx=fx)
         else:
-            render_vertical(src, out, cap, box)
+            render_vertical(src, out, cap, box, fx=fx)
 
     for attempt in range(STREAM_TRIES):
         try:
@@ -108,7 +115,7 @@ def render_clip(meta: dict, plan: dict, idx: int, cam_cache: dict, audio) -> dic
             "source": how, "link": f"https://youtu.be/{vid}?t={int(s)}", "text": plan["text"]}
 
 
-def run(url: str, top: int = 3, pool: int | None = None) -> list[dict]:
+def run(url: str, top: int = 3, pool: int | None = None, effects: str = "all") -> list[dict]:
     t0 = time.time()
     meta = load_or_fetch_metadata(url)
     log(f"{meta['title']} ({meta['channel']}, {fmt(meta['duration'])})")
@@ -118,7 +125,7 @@ def run(url: str, top: int = 3, pool: int | None = None) -> list[dict]:
     clips = []
     for i, p in enumerate(plans, 1):
         t = time.time()
-        clips.append(render_clip(meta, p, i, cam_cache, audio))
+        clips.append(render_clip(meta, p, i, cam_cache, audio, effects))
         log(f"render clip {i}/{len(plans)}: {fmt(p['start'])}-{fmt(p['end'])} "
             f"via {clips[-1]['source']} ({time.time() - t:.0f} s)")
     summary = out_dir(meta["id"]) / "clips.json"
@@ -134,8 +141,10 @@ def main() -> None:
     ap.add_argument("url")
     ap.add_argument("--top", type=int, default=3, help="jumlah clip (default 3)")
     ap.add_argument("--pool", type=int, help="jumlah kandidat yang ditranskrip (default top x 3)")
+    ap.add_argument("--effects", choices=["all", "sfx", "none"], default="all",
+                    help="all = SFX + zoom + lagu (default), sfx = tanpa lagu, none = polos")
     args = ap.parse_args()
-    for c in run(args.url, args.top, args.pool):
+    for c in run(args.url, args.top, args.pool, args.effects):
         print(f"  {c['file']}  {c['duration']:.0f}s  {c['layout']:<6}  {c['link']}  {c['title']}")
         print(f"      {c['text'][:110]}")
 
