@@ -6,7 +6,7 @@ from yt_dlp.utils import download_range_func
 
 from src.paths import work_dir
 
-YDL_BASE = {"quiet": True, "no_warnings": True}
+YDL_BASE = {"quiet": True, "no_warnings": True, "js_runtimes": {"node": {}, "deno": {}}}
 
 
 def fetch_metadata(url: str) -> dict:
