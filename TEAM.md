@@ -18,10 +18,10 @@ Aturan paling penting: **jangan edit file milik orang lain.** Kalau butuh peruba
 
 | | |
 |---|---|
-| Langkah | **Step 7: transkrip kandidat (faster-whisper, timestamp per kata)** |
-| Branch | `feat/step-07-transcribe` |
-| File yang sedang dipegang | `src/transcribe.py` (baru), `requirements.txt`, `STEPS.md` |
-| Berikutnya | Step 8 snap kalimat → Step 9 caption → Step 10 facecam → Step 11 pipeline |
+| Langkah | **MVP selesai (Step 0 sampai 11).** Belum ada langkah yang sedang dipegang |
+| Branch | - |
+| File yang sedang dipegang | - |
+| Berikutnya | Setelah MVP: LLM refine, chat Twitch, eval (lihat STEPS.md) |
 
 ### KO sedang mengerjakan
 
@@ -126,11 +126,11 @@ Ikuti [`STEPS.md`](STEPS.md). Ringkasnya:
 | # | Branch | Isi | Status |
 |---|---|---|---|
 | 0 sampai 6 | `feat/step-00-setup` sampai `feat/step-06-render` | Setup, metadata, audio, loudness, scoring, download potongan, render 9:16 | ✅ |
-| 7 | `feat/step-07-transcribe` | Transkrip kandidat | 🟨 |
-| 8 | `feat/step-08-snap` | Snap ke batas kalimat | ⬜ |
-| 9 | `feat/step-09-captions` | Caption karaoke | ⬜ |
-| 10 | `feat/step-10-facecam` | Layout facecam + gameplay | ⬜ |
-| 11 | `feat/step-11-pipeline` | Satu perintah: link → 3 clip | ⬜ |
+| 7 | `feat/step-07-transcribe` | Transkrip kandidat | ✅ |
+| 8 | `feat/step-08-snap` | Snap ke batas kalimat | ✅ |
+| 9 | `feat/step-09-captions` | Caption karaoke | ✅ |
+| 10 | `feat/step-10-facecam` | Layout facecam + gameplay | ✅ |
+| 11 | `feat/step-11-pipeline` | Satu perintah: link → 3 clip | ✅ |
 
 ---
 
