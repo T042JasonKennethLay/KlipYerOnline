@@ -12,8 +12,8 @@ Hal yang lebih berat (Twitch chat, LLM, VLM, Rust, K8s) baru disentuh **setelah 
 
 | # | Step | Status |
 |---|---|---|
-| 0 | Setup environment | ⬜ |
-| 1 | Ambil metadata + heatmap dari link | ⬜ |
+| 0 | Setup environment | ✅ |
+| 1 | Ambil metadata + heatmap dari link | ✅ |
 | 2 | Download audio saja | ⬜ |
 | 3 | Loudness per detik + grafik | ⬜ |
 | 4 | Gabung sinyal → top momen | ⬜ |
@@ -237,4 +237,7 @@ Isi tiap kali selesai satu step, biar kelihatan progresnya.
 
 | Tanggal | Step | Video yang dites | Hasil | Catatan |
 |---|---|---|---|---|
-| | | | | |
+| 2026-11-24 | 0 | - | ✅ | Python 3.12.4, ffmpeg 9.0, yt-dlp 2026.11.23, GPU RTX 3050 Laptop 4GB |
+| 2026-11-24 | 1 | `sqWUDQloQm8` (VOD 3j17m, 1jt views) | ✅ | heatmap 100 titik |
+| 2026-11-24 | 1 | `cbHDLQhCnkM` (26 menit, 200rb views) | ✅ | heatmap kosong, padahal views lumayan |
+| 2026-11-24 | 1 | `KoX-RdIKZIs` (VOD 1 jam, 11 views) | ✅ | heatmap kosong (normal) |
