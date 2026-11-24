@@ -12,13 +12,13 @@ Hal yang lebih berat (Twitch chat, LLM, VLM, Rust, K8s) baru disentuh **setelah 
 
 | # | Step | Status |
 |---|---|---|
-| 0 | Setup environment | ⬜ |
-| 1 | Ambil metadata + heatmap dari link | ⬜ |
-| 2 | Download audio saja | ⬜ |
-| 3 | Loudness per detik + grafik | ⬜ |
-| 4 | Gabung sinyal → top momen | ⬜ |
-| 5 | Download potongan video (section) | ⬜ |
-| 6 | Render 9:16 (center crop) | ⬜ |
+| 0 | Setup environment | ✅ |
+| 1 | Ambil metadata + heatmap dari link | ✅ |
+| 2 | Download audio saja | ✅ |
+| 3 | Loudness per detik + grafik | ✅ |
+| 4 | Gabung sinyal → top momen | ✅ |
+| 5 | Download potongan video (section) | ✅ |
+| 6 | Render 9:16 (center crop) | ✅ |
 | 7 | Transkrip kandidat (timestamp per kata) | ⬜ |
 | 8 | Snap ke batas kalimat | ⬜ |
 | 9 | Caption karaoke (.ass) + render | ⬜ |
@@ -237,4 +237,13 @@ Isi tiap kali selesai satu step, biar kelihatan progresnya.
 
 | Tanggal | Step | Video yang dites | Hasil | Catatan |
 |---|---|---|---|---|
-| | | | | |
+| 2026-11-24 | 0 | - | ✅ | Python 3.12.4, ffmpeg 9.0, yt-dlp 2026.11.23, GPU RTX 3050 Laptop 4GB |
+| 2026-11-24 | 1 | `sqWUDQloQm8` (VOD 3j17m, 1jt views) | ✅ | heatmap 100 titik |
+| 2026-11-24 | 1 | `cbHDLQhCnkM` (26 menit, 200rb views) | ✅ | heatmap kosong, padahal views lumayan |
+| 2026-11-24 | 1 | `KoX-RdIKZIs` (VOD 1 jam, 11 views) | ✅ | heatmap kosong (normal) |
+| 2026-11-24 | 2 | `sqWUDQloQm8` | ✅ | audio m4a 183 MB, durasi 11860 s sama dengan metadata, download 2 menit |
+| 2026-11-24 | 3 | `sqWUDQloQm8` | ✅ | loudness mentah numpuk di akhir stream (bagian akhir lebih keras). Diganti lonjakan relatif vs median 5 menit, puncak jelas di 1:47:33 (+20 dB). Heatmap condong ke awal video. Cek manual link puncak oleh user |
+| 2026-11-24 | 4 | `sqWUDQloQm8` | ✅ | top 5: 0:12:39, 1:47:34, 0:42:41, 0:22:10, 2:05:24. Heatmap di-detrend (median 15 menit) biar tidak condong ke awal |
+| 2026-11-24 | 4 | `cbHDLQhCnkM` | ✅ | fallback audio saja jalan. Kena/tidak perlu dicek manual |
+| 2026-11-24 | 5 | `sqWUDQloQm8` 1:46:59 - 1:47:39 | ✅ | durasi pas 40.000 s, 1080p60, 15 MB, 35 detik. Frame awal tidak hitam. VOD ini tanpa facecam |
+| 2026-11-24 | 6 | `sqWUDQloQm8` | ✅ | 1080x1920 30fps + aac, NVENC: render 40 s dalam 6 s |

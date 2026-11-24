@@ -28,3 +28,4 @@ models/*.onnx
 Thumbs.db
 .vscode/
 .idea/
+.secrets/
