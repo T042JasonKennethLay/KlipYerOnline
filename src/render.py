@@ -65,14 +65,23 @@ def video_size(src: Path) -> tuple[int, int]:
     return int(w), int(h)
 
 
-def render_vertical(src: Path, out: Path, ass: Path | None = None,
-                    cam_box: tuple[int, int, int, int] | None = None) -> Path:
+def render_vertical(src, out: Path, ass: Path | None = None,
+                    cam_box: tuple[int, int, int, int] | None = None,
+                    start: float = 0.0, end: float | None = None) -> Path:
+    """src: file lokal (Path) atau StreamSource (link langsung, butuh start dan end)."""
     out.parent.mkdir(parents=True, exist_ok=True)
-    cwd = (ass or src).resolve().parent
-    fc = build_filter(ass.resolve() if ass else None, cwd, cam_box, video_size(src) if cam_box else None)
-    cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(src.resolve()),
+    if isinstance(src, Path):
+        inputs, amap = ["-i", str(src.resolve())], "0:a?"
+        size = video_size(src) if cam_box else None
+        cwd = (ass or src).resolve().parent
+    else:
+        inputs, amap = src.input_args(start, end - start), src.audio_label
+        size = (src.width, src.height)
+        cwd = (ass or out).resolve().parent
+    fc = build_filter(ass.resolve() if ass else None, cwd, cam_box, size if cam_box else None)
+    cmd = ["ffmpeg", "-y", "-v", "error", *inputs,
            "-filter_complex", fc,
-           "-map", "[out]", "-map", "0:a?", *video_encoder(), "-r", "30",
+           "-map", "[out]", "-map", amap, *video_encoder(), "-r", "30",
            "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", str(out.resolve())]
     subprocess.run(cmd, check=True, cwd=cwd)
     return out
