@@ -30,3 +30,9 @@ Thumbs.db
 .vscode/
 .idea/
 .secrets/
+
+# aset audio (lisensi tiap file beda, jangan di-commit)
+assets/sfx/*
+assets/music/*
+!assets/sfx/.gitkeep
+!assets/music/.gitkeep
