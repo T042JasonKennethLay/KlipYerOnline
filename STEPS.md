@@ -1,0 +1,240 @@
+# KlipYerOnline: Step by Step Testing
+
+> Prinsip: **satu step = satu hal kecil yang bisa dites sendiri.** Jangan lanjut ke step berikutnya sebelum step sekarang lulus.
+> Tiap step menghasilkan file output di folder `work/` atau `out/`, jadi kita bisa cek hasilnya pakai mata sendiri.
+
+Target akhir bagian ini (Phase 0–1): **link YouTube → 3 clip MP4 9:16 dengan caption**, jalan di laptop sendiri.
+Hal yang lebih berat (Twitch chat, LLM, VLM, Rust, K8s) baru disentuh **setelah ini jalan**.
+
+---
+
+## Progress
+
+| # | Step | Status |
+|---|---|---|
+| 0 | Setup environment | ⬜ |
+| 1 | Ambil metadata + heatmap dari link | ⬜ |
+| 2 | Download audio saja | ⬜ |
+| 3 | Loudness per detik + grafik | ⬜ |
+| 4 | Gabung sinyal → top momen | ⬜ |
+| 5 | Download potongan video (section) | ⬜ |
+| 6 | Render 9:16 (center crop) | ⬜ |
+| 7 | Transkrip kandidat (timestamp per kata) | ⬜ |
+| 8 | Snap ke batas kalimat | ⬜ |
+| 9 | Caption karaoke (.ass) + render | ⬜ |
+| 10 | Layout facecam + gameplay | ⬜ |
+| 11 | `pipeline.py`: semua jadi satu perintah | ⬜ |
+
+Status: ⬜ belum · 🟨 lagi dikerjain · ✅ lulus
+
+---
+
+## Step 0: Setup environment
+
+**Tujuan:** semua tools dasar terpasang dan bisa dipanggil.
+
+**Yang dibuat:**
+- Virtual env Python (`.venv`)
+- `requirements.txt` awal: `yt-dlp`, `numpy`, `scipy`, `matplotlib`
+- Folder: `src/`, `work/`, `out/`
+- ffmpeg terpasang dan ada di PATH
+
+**Cara test:**
+```powershell
+python --version
+ffmpeg -version
+yt-dlp --version
+```
+
+**Lulus kalau:** ketiga perintah keluar versinya tanpa error.
+
+---
+
+## Step 1: Ambil metadata + heatmap dari link
+
+**Tujuan:** buktikan kita bisa "membaca" video **tanpa download videonya**.
+
+**Yang dibuat:** `src/ingest.py` → fungsi `fetch_metadata(url)`, simpan hasilnya ke `work/<id>/meta.json`.
+
+**Cara test:**
+```powershell
+python -m src.ingest "<link youtube populer>"
+```
+Coba 3 video: 1 video populer (views jutaan), 1 video kecil, 1 VOD/stream panjang.
+
+**Lulus kalau:**
+- Keluar `title`, `duration`, dan jumlah titik heatmap
+- Video populer punya heatmap (~100 titik), video kecil boleh kosong (itu normal)
+
+**Yang dipelajari:** video mana saja yang punya heatmap. Ini nentuin sinyal kita nanti.
+
+---
+
+## Step 2: Download audio saja
+
+**Tujuan:** ambil bahan untuk sinyal suara, tapi tetap hemat (audio jauh lebih kecil dari video).
+
+**Yang dibuat:** `download_audio(url)` di `src/ingest.py` → `work/<id>/audio.m4a` (atau `.webm`).
+
+**Cara test:** jalankan di 1 video, lalu cek:
+```powershell
+ffprobe work/<id>/audio.m4a
+```
+
+**Lulus kalau:** durasi audio ≈ durasi di `meta.json`, dan ukuran file jauh lebih kecil dari videonya.
+
+---
+
+## Step 3: Loudness per detik + grafik
+
+**Tujuan:** ubah audio jadi angka per detik, lalu **lihat sendiri** apakah puncaknya masuk akal.
+
+**Yang dibuat:**
+- `src/signals.py` → `loudness_per_second(audio_path)` dan `heatmap_per_second(heatmap, duration)`
+- `src/plot.py` → gambar 2 garis (heatmap + loudness) di 1 grafik → `work/<id>/signals.png`
+
+**Cara test:** buka `signals.png`, lalu buka video di YouTube di detik yang puncak (`?t=<detik>`).
+
+**Lulus kalau:** grafik keluar, dan minimal beberapa puncak memang momen ramai (teriak, ketawa, dll).
+
+> Ini step paling penting di awal. Kalau puncaknya ngaco, kita perbaiki di sini dulu, belum perlu AI apa-apa.
+
+---
+
+## Step 4: Gabung sinyal → top momen
+
+**Tujuan:** dari sinyal-sinyal tadi, keluarkan **daftar 5 timestamp kandidat**.
+
+**Yang dibuat:** `src/score.py` → `smooth`, `zscore`, `combined_score`, `top_moments` (jarak antar momen minimal ~90 detik).
+Output: `work/<id>/candidates.json`.
+
+**Cara test:** script print 5 link langsung, contoh `https://youtu.be/<id>?t=1234`. Klik satu per satu.
+
+**Lulus kalau:** dari 5 kandidat, **minimal 2–3 terasa "layak clip"**. Catat hasilnya (kena / tidak) di tabel kecil. Ini jadi eval manual pertama kita.
+
+---
+
+## Step 5: Download potongan video (section)
+
+**Tujuan:** download video **cuma bagian kandidat** (misal 40 detik), bukan full video.
+
+**Yang dibuat:** `download_section(url, start, end, out)` di `src/ingest.py` → `work/<id>/raw_0.mp4`.
+
+**Cara test:** buka `raw_0.mp4`, cek mulai dan selesainya.
+
+**Lulus kalau:** durasi sesuai (±1 detik), gambar dan suara normal, tidak ada frame hitam di awal.
+
+---
+
+## Step 6: Render 9:16 (center crop)
+
+**Tujuan:** clip vertikal pertama, versi paling simpel dulu (tanpa facecam, tanpa caption).
+
+**Yang dibuat:** `src/render.py` → `render_vertical(src, out)` dengan center crop → `out/clip_0.mp4`.
+
+**Cara test:** buka di HP atau player, dan cek resolusinya:
+```powershell
+ffprobe -v error -show_entries stream=width,height out/clip_0.mp4
+```
+
+**Lulus kalau:** 1080x1920, suara ada, bisa diputar normal.
+
+> 🎉 Di titik ini kita sudah punya **link → clip vertikal**. Masih kasar, tapi end-to-end.
+
+---
+
+## Step 7: Transkrip kandidat (timestamp per kata)
+
+**Tujuan:** dapat teks + waktu tiap kata, **cuma di area kandidat** (±60–90 detik), bukan full video.
+
+**Yang dibuat:** `src/transcribe.py` pakai `faster-whisper` (pakai model `small` dulu kalau tanpa GPU).
+Output: `work/<id>/transcript_<t>.json`.
+
+**Cara test:** print 20 kata pertama beserta `start` dan `end`-nya, lalu cocokkan dengan video.
+
+**Lulus kalau:** teksnya kebanyakan benar dan timestamp meleset < 0.5 detik.
+
+> Kalau CPU terlalu lambat, catat waktunya. Nanti kita putuskan model mana yang dipakai.
+
+---
+
+## Step 8: Snap ke batas kalimat
+
+**Tujuan:** clip tidak kepotong di tengah omongan.
+
+**Yang dibuat:** `snap_to_sentences(peak, segments)` di `src/select.py`. Hasilnya `start` dan `end` baru untuk Step 5.
+
+**Cara test:** render ulang 1 clip pakai batas baru, lalu bandingkan dengan versi Step 6.
+
+**Lulus kalau:** clip mulai di awal kalimat dan selesai di akhir kalimat, durasinya 15–60 detik.
+
+---
+
+## Step 9: Caption karaoke (.ass) + render
+
+**Tujuan:** caption 3 kata per layar, kata yang sedang diucapkan berwarna kuning.
+
+**Yang dibuat:**
+- `src/captions.py` → `build_ass(words, clip_start, clip_end, out)`
+- `render_vertical` menerima parameter `ass_path`
+- Font tebal (misal Montserrat ExtraBold) di folder `fonts/`
+
+**Cara test:** tonton clip-nya.
+
+**Lulus kalau:** caption sinkron dengan suara, terbaca jelas, tidak keluar layar.
+
+> ⚠️ Di Windows, path `.ass` di ffmpeg suka bermasalah. Pakai path relatif dari folder kerja.
+
+---
+
+## Step 10: Layout facecam + gameplay
+
+**Tujuan:** facecam di atas (1080x640), gameplay di bawah (1080x1280).
+
+**Yang dibuat:**
+- Pertama: **preset manual** `presets/<channel>.json` berisi `cam_box: [x, y, w, h]` (lebih stabil, dan lebih gampang dites)
+- Setelah itu: auto-detect pakai YuNet (`src/reframe.py`) untuk channel yang belum punya preset
+
+**Cara test:** render 1 clip streamer pakai preset, lalu 1 clip pakai auto-detect.
+
+**Lulus kalau:** wajah streamer utuh di bagian atas, gameplay tidak gepeng.
+
+---
+
+## Step 11: `pipeline.py`: semua jadi satu perintah
+
+**Tujuan:** satu perintah dari link sampai 3 clip jadi.
+
+```powershell
+python -m src.pipeline "<link>" --top 3
+```
+
+**Yang dibuat:** `src/pipeline.py` yang memanggil Step 1 → 10 berurutan. Pakai cache: kalau file di `work/<id>/` sudah ada, step itu dilewati, jadi kalau ada yang error kita tidak perlu ulang dari awal.
+
+**Lulus kalau:** 3 clip muncul di `out/<id>/` tanpa intervensi manual, dan minimal 2 dari 3 layak upload.
+
+> ✅ Selesai di sini = **MVP Phase 1 jadi.**
+
+---
+
+## Setelah MVP (nanti, satu-satu juga)
+
+Urutan yang disarankan, masing-masing jadi step kecil sendiri:
+
+1. **Twitch:** chat replay → sinyal chat (+ geser ~5 detik karena chat telat)
+2. **LLM refine:** batas clip + skor + judul (output JSON, ada fallback kalau gagal)
+3. **Eval:** golden set kecil + `precision@k`, supaya perubahan dinilai pakai angka, bukan feeling
+4. **Deteksi tawa/teriak:** YAMNet, lebih akurat dari loudness saja
+5. **Momen hening:** quiet anomaly + motion + VLM
+6. **Phase 3:** orchestrator Rust + worker + Redis Streams
+7. **Phase 4:** train ranker sendiri
+
+---
+
+## Catatan hasil test
+
+Isi tiap kali selesai satu step, biar kelihatan progresnya.
+
+| Tanggal | Step | Video yang dites | Hasil | Catatan |
+|---|---|---|---|---|
+| | | | | |
