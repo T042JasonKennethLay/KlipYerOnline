@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Env & secrets
+.env
+.env.*
+client_secret*.json
+cookies.txt
+
+# Output pipeline
+work/
+out/
+
+# Model & media besar
+models/*.onnx
+*.mp4
+*.m4a
+*.webm
+*.wav
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
