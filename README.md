@@ -43,6 +43,8 @@ Opsi:
 
 Supaya clip dipilih LLM, salin `.env.example` jadi `.env` lalu isi `ANTHROPIC_API_KEY` (Claude, berbayar) atau `GEMINI_API_KEY` (Gemini, ada free tier). Kalau Claude gagal, misalnya saldo habis, otomatis pindah ke Gemini. Tanpa key, pipeline tetap jalan dengan pemilihan heuristik.
 
+Gaya judul mengikuti Shorts clip streamer yang sedang ramai (humor Gen Z, 💀 dan 🥀). Contohnya disimpan di `data/trends/shorts.json`; perbarui dengan `python -m src.trends` supaya ikut tren terbaru.
+
 Lagu dan SFX sendiri ditaruh di `assets/`, lihat [assets/README.md](assets/README.md).
 
 Model whisper di-download otomatis saat pertama jalan. Kalau download dari Hugging Face macet, taruh model manual di `models/faster-whisper-large-v3-turbo/`.
