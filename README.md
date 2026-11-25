@@ -72,8 +72,8 @@ Login pertama membuka browser untuk memilih channel. Clip yang sudah ter-upload 
 
 Catatan:
 
-- Project Google yang belum lolos audit YouTube hanya bisa upload sebagai **private**. Setelah ter-upload, ubah ke public dari YouTube Studio, atau ajukan audit di Google Cloud.
-- Kuota gratis API sekitar 10.000 unit per hari, satu upload sekitar 1.600 unit, jadi kira-kira 6 clip per hari.
+- Project Google yang belum lolos audit YouTube bisa saja dikunci ke **private**. Di tes kami (25 Nov 2026) upload public tetap public; status yang benar-benar dipasang YouTube dicatat di `clips.json`.
+- Kuota API per hari terbatas. Di tes kami 26 upload dalam sehari masih lolos. Kalau kuota habis, upload berhenti dengan rapi dan sisa clip bisa dilanjutkan besok dengan perintah yang sama.
 - Clip dari video orang lain bisa kena klaim hak cipta. Paling aman dipakai untuk channel sendiri atau streamer yang sudah kasih izin.
 
 ## Dokumen
