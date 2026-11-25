@@ -124,17 +124,21 @@ def scan(meta: dict, segs: list[dict], hints: list[int], log=print) -> list[dict
 
 
 def build_candidates(segs: list[dict], moments: list[dict], peaks: list[dict],
-                     max_cands: int = 20) -> list[dict]:
-    """Gabungkan usulan LLM dan puncak sinyal jadi kandidat refine, tanpa duplikat."""
-    items = [{"t": round((m["start"] + m["end"]) / 2), "a": m["start"], "b": m["end"],
-              "score": float(m["score"]), "src": "scan"} for m in moments]
-    items.sort(key=lambda c: -c["score"])
-    for p in peaks:
-        if all(not (c["a"] - 10 <= p["t"] <= c["b"] + 10) for c in items):
-            items.append({"t": p["t"], "a": p["t"] - 20, "b": p["t"] + 10, "score": float(p["score"]),
-                          "src": "sinyal"})
+                     max_cands: int = 30) -> list[dict]:
+    """Gabungkan usulan LLM dan puncak sinyal jadi kandidat refine, tanpa duplikat.
+
+    Skor scan dari bagian berbeda tidak sebanding, jadi sepertiga slot disisakan untuk puncak
+    sinyal (heatmap penonton + suara) supaya sinyal nyata tetap ikut dinilai refine."""
+    scans = sorted(({"t": round((m["start"] + m["end"]) / 2), "a": m["start"], "b": m["end"],
+                     "score": float(m["score"]), "src": "scan"} for m in moments), key=lambda c: -c["score"])
+    sig = [{"t": p["t"], "a": p["t"] - 20, "b": p["t"] + 10, "score": float(p["score"]), "src": "sinyal"}
+           for p in sorted(peaks, key=lambda p: -p["score"])]
+    sig = [p for p in sig if all(not (c["a"] - 10 <= p["t"] <= c["b"] + 10) for c in scans)]
+    sig = sig[:max_cands // 3]
     cands, taken = [], []
-    for c in items:
+    for c in sig + scans:
+        if len(cands) >= max_cands:
+            break
         if any(min(c["b"], b) - max(c["a"], a) > 0.5 * (c["b"] - c["a"]) for a, b in taken):
             continue
         part = [s for s in segs if s["end"] > c["a"] - CONTEXT and s["start"] < c["b"] + CONTEXT]
@@ -142,8 +146,6 @@ def build_candidates(segs: list[dict], moments: list[dict], peaks: list[dict],
             continue
         taken.append((c["a"], c["b"]))
         cands.append({"t": c["t"], "score": c["score"], "src": c["src"], "segments": part})
-        if len(cands) >= max_cands:
-            break
     return cands
 
 
