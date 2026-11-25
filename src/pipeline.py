@@ -1,6 +1,7 @@
 """Satu perintah: link video -> beberapa clip 9:16 dengan caption.
 
     python -m src.pipeline "<url>" --top 3
+    python -m src.pipeline "<url>" --top 3 --quick    # hanya puncak sinyal, lebih cepat
 
 Video tidak diunduh: ffmpeg membaca potongan langsung dari stream YouTube (HLS) dan audio dari
 file audio lokal. Semua tahap pakai cache di work/<id>/, jadi kalau ada yang gagal tinggal jalankan ulang.
@@ -17,8 +18,9 @@ from src.ingest import (StreamSource, download_audio, download_section, grab_pro
                         stream_source)
 from src.paths import out_dir, work_dir
 from src.reframe import preset_or_detect
-from src.refine import refine
+from src.refine import providers, refine
 from src.render import render_vertical
+from src.scan import build_candidates, scan, transcribe_full
 from src.score import find_candidates
 from src.transcribe import transcribe_candidate
 
@@ -37,10 +39,8 @@ def log(msg: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
-def plan_clips(meta: dict, top: int, pool: int | None = None) -> list[dict]:
-    """Ambil kandidat lebih banyak dari yang dibutuhkan, transkrip, buang yang hening, lalu refine."""
-    audio = download_audio(meta["url"], meta["id"])
-    pool = pool or top * 3
+def peak_candidates(meta: dict, audio, pool: int) -> list[dict]:
+    """Mode cepat: hanya puncak sinyal, transkrip 2 menit di sekitar masing-masing."""
     cands = sorted(find_candidates(meta, k=pool), key=lambda c: -c["score"])
     log(f"{len(cands)} kandidat dari sinyal, transkrip satu per satu")
     voiced = []
@@ -51,8 +51,32 @@ def plan_clips(meta: dict, top: int, pool: int | None = None) -> list[dict]:
         log(f"  {fmt(c['t'])} skor {c['score']:+.2f} ({n} kata di sekitar puncak) {status}")
         if status == "ok":
             voiced.append({**c, "segments": segs})
-    clips, mode = refine(meta["id"], voiced)
-    log(f"refine ({mode}): {len(clips)} dari {len(voiced)} kandidat layak")
+    return voiced
+
+
+def scan_candidates(meta: dict, audio, pool: int) -> list[dict]:
+    """Mode penuh: transkrip seluruh video, LLM membaca semuanya, puncak sinyal jadi petunjuk."""
+    log("transkrip seluruh video")
+    segs = transcribe_full(meta["id"], audio, meta["duration"], log)
+    peaks = find_candidates(meta, k=pool)
+    moments = scan(meta, segs, [p["t"] for p in peaks], log)
+    if not moments:
+        return []
+    cands = build_candidates(segs, moments, peaks)
+    n_scan = sum(c["src"] == "scan" for c in cands)
+    log(f"{len(cands)} kandidat ({n_scan} dari scan LLM, {len(cands) - n_scan} dari sinyal)")
+    return cands
+
+
+def plan_clips(meta: dict, top: int, pool: int | None = None, quick: bool = False) -> list[dict]:
+    """Kumpulkan kandidat (scan penuh kalau ada LLM, kalau tidak puncak sinyal), lalu refine."""
+    audio = download_audio(meta["url"], meta["id"])
+    pool = pool or top * 3
+    cands = [] if quick or not providers() else scan_candidates(meta, audio, pool)
+    if not cands:
+        cands = peak_candidates(meta, audio, pool)
+    clips, mode = refine(meta["id"], cands, context=f"Video: {meta['title']} by {meta['channel']}")
+    log(f"refine ({mode}): {len(clips)} dari {len(cands)} kandidat layak")
     plans = []
     for c in clips[:top]:
         words = words_in(c["segments"], c["start"], c["end"])
@@ -112,11 +136,12 @@ def render_clip(meta: dict, plan: dict, idx: int, cam_cache: dict, audio, effect
             "source": how, "link": f"https://youtu.be/{vid}?t={int(s)}", "text": plan["text"]}
 
 
-def run(url: str, top: int = 3, pool: int | None = None, effects: str = "all") -> list[dict]:
+def run(url: str, top: int = 3, pool: int | None = None, effects: str = "all",
+        quick: bool = False) -> list[dict]:
     t0 = time.time()
     meta = load_or_fetch_metadata(url)
     log(f"{meta['title']} ({meta['channel']}, {fmt(meta['duration'])})")
-    plans = plan_clips(meta, top, pool)
+    plans = plan_clips(meta, top, pool, quick)
     audio = download_audio(meta["url"], meta["id"])
     cam_cache: dict = {}
     clips = []
@@ -140,8 +165,10 @@ def main() -> None:
     ap.add_argument("--pool", type=int, help="jumlah kandidat yang ditranskrip (default top x 3)")
     ap.add_argument("--effects", choices=["all", "sfx", "none"], default="all",
                     help="all = SFX + zoom + lagu (default), sfx = tanpa lagu, none = polos")
+    ap.add_argument("--quick", action="store_true",
+                    help="hanya puncak sinyal, tanpa transkrip dan scan LLM seluruh video (lebih cepat)")
     args = ap.parse_args()
-    for c in run(args.url, args.top, args.pool, args.effects):
+    for c in run(args.url, args.top, args.pool, args.effects, args.quick):
         print(f"  {c['file']}  {c['duration']:.0f}s  {c['layout']:<6}  {c['link']}  {c['title']}")
         print(f"      {c['text'][:110]}")
 

@@ -4,7 +4,7 @@ AI auto-clipper: kasih link video YouTube, keluar clip vertikal 9:16 yang siap u
 
 ## Fitur
 
-- Cari momen menarik dari heatmap "Most Replayed" dan lonjakan suara
+- Cari momen dari seluruh video: LLM membaca transkrip penuh, ditambah heatmap "Most Replayed" dan lonjakan suara sebagai petunjuk
 - LLM (Claude atau Gemini) menyaring kandidat yang membosankan, memotong dari hook sampai punchline, dan membuat judul
 - Video tidak diunduh: ffmpeg baca potongan langsung dari stream YouTube
 - Transkrip per kata (faster-whisper, GPU) untuk caption karaoke
@@ -37,7 +37,8 @@ Hasilnya ada di `out/<id>/` beserta `clips.json`.
 Opsi:
 
 - `--effects all|sfx|none`: semua efek (default), tanpa lagu, atau polos
-- `--pool N`: jumlah kandidat yang ditranskrip (default top x 3)
+- `--pool N`: jumlah puncak sinyal yang dipakai (default top x 3)
+- `--quick`: hanya puncak sinyal, tanpa transkrip dan scan seluruh video (lebih cepat, tapi momen yang tidak keras bisa terlewat)
 
 Supaya clip dipilih LLM, salin `.env.example` jadi `.env` lalu isi `ANTHROPIC_API_KEY` (Claude, berbayar) atau `GEMINI_API_KEY` (Gemini, ada free tier). Kalau Claude gagal, misalnya saldo habis, otomatis pindah ke Gemini. Tanpa key, pipeline tetap jalan dengan pemilihan heuristik.
 
