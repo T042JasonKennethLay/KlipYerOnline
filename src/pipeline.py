@@ -14,6 +14,7 @@ import warnings
 
 from src.boundaries import words_in
 from src.captions import build_ass
+from src.cuts import plan_keep, remap, remap_words, total
 from src.ingest import (StreamSource, download_audio, download_section, grab_probe, load_or_fetch_metadata,
                         stream_source)
 from src.paths import out_dir, work_dir
@@ -101,26 +102,31 @@ def facecam(meta: dict, src, s: float, cam_cache: dict):
     return cam_cache["box"]
 
 
-def render_clip(meta: dict, plan: dict, idx: int, cam_cache: dict, audio, effects: str = "all") -> dict:
-    """effects: "all" (SFX + zoom + lagu), "sfx" (tanpa lagu), atau "none"."""
+def render_clip(meta: dict, plan: dict, idx: int, cam_cache: dict, audio, effects: str = "all",
+                cuts: bool = True) -> dict:
+    """effects: "all" (SFX + zoom + lagu), "sfx" (tanpa lagu), atau "none".
+    cuts: jump cut di jeda dan bagian diam (src.cuts)."""
     vid = meta["id"]
     s, e = plan["start"], plan["end"]
     out = out_dir(vid) / f"clip_{idx:02d}_{int(s)}.mp4"
     cap = work_dir(vid) / f"cap_{int(s * 100)}.ass"
+    punch = plan.get("punchline")
+    punch = punch if punch is not None and s <= punch <= e else None
+    keep = plan_keep(plan["words"], s, e, audio, punch) if cuts else [(0.0, e - s)]
+    new_dur = total(keep)
 
     def render(src, offset: float) -> None:
         box = facecam(meta, src, s, cam_cache)
         layout = "cam" if box else "center"
-        build_ass(plan["words"], s, e, cap, pos=(540, CAPTION_Y[layout]), title=plan.get("title", ""),
-                  title_y=TITLE_Y[layout])
-        punch = plan.get("punchline")
+        build_ass(remap_words(plan["words"], s, keep), s, s + new_dur, cap, pos=(540, CAPTION_Y[layout]),
+                  title=plan.get("title", ""), title_y=TITLE_Y[layout])
         fx = None if effects == "none" else {
-            "punch": punch - s if punch is not None and s <= punch <= e else None,
+            "punch": remap(punch - s, keep) if punch is not None else None,
             "seed": int(s), "music": effects == "all"}
         if isinstance(src, StreamSource):
-            render_vertical(src, out, cap, box, s, e, fx=fx)
+            render_vertical(src, out, cap, box, s, e, fx=fx, keep=keep)
         else:
-            render_vertical(src, out, cap, box, fx=fx)
+            render_vertical(src, out, cap, box, fx=fx, keep=keep)
 
     for attempt in range(STREAM_TRIES):
         try:
@@ -134,13 +140,14 @@ def render_clip(meta: dict, plan: dict, idx: int, cam_cache: dict, audio, effect
         render(download_section(meta["url"], vid, s, e, f"raw_{int(s * 100)}_{int(e * 100)}"), 0)
         how = "download"
     layout = "cam" if cam_cache.get("box") else "center"
-    return {"file": str(out.name), "start": s, "end": e, "duration": round(e - s, 2), "score": plan["score"],
+    return {"file": str(out.name), "start": s, "end": e, "duration": round(new_dur, 2),
+            "cut": round(e - s - new_dur, 2), "score": plan["score"],
             "layout": layout, "title": plan["title"], "punchline": plan["punchline"], "reason": plan["reason"],
             "source": how, "link": f"https://youtu.be/{vid}?t={int(s)}", "text": plan["text"]}
 
 
 def run(url: str, top: int = 3, pool: int | None = None, effects: str = "all",
-        quick: bool = False) -> list[dict]:
+        quick: bool = False, cuts: bool = True) -> list[dict]:
     t0 = time.time()
     meta = load_or_fetch_metadata(url)
     log(f"{meta['title']} ({meta['channel']}, {fmt(meta['duration'])})")
@@ -150,7 +157,7 @@ def run(url: str, top: int = 3, pool: int | None = None, effects: str = "all",
     clips = []
     for i, p in enumerate(plans, 1):
         t = time.time()
-        clips.append(render_clip(meta, p, i, cam_cache, audio, effects))
+        clips.append(render_clip(meta, p, i, cam_cache, audio, effects, cuts))
         log(f"render clip {i}/{len(plans)}: {fmt(p['start'])}-{fmt(p['end'])} "
             f"via {clips[-1]['source']} ({time.time() - t:.0f} s)")
     summary = out_dir(meta["id"]) / "clips.json"
@@ -183,10 +190,11 @@ def main() -> None:
                     help="all = SFX + zoom + lagu (default), sfx = tanpa lagu, none = polos")
     ap.add_argument("--quick", action="store_true",
                     help="hanya puncak sinyal, tanpa transkrip dan scan LLM seluruh video (lebih cepat)")
+    ap.add_argument("--no-cuts", action="store_true", help="tanpa jump cut (jeda dan diam tidak dipotong)")
     ap.add_argument("--upload", choices=["private", "unlisted", "public"],
                     help="langsung upload ke YouTube kamu dengan privasi ini (lihat src/upload.py)")
     args = ap.parse_args()
-    clips = run(args.url, args.top, args.pool, args.effects, args.quick)
+    clips = run(args.url, args.top, args.pool, args.effects, args.quick, not args.no_cuts)
     for c in clips:
         print(f"  {c['file']}  {c['duration']:.0f}s  {c['layout']:<6}  {c['link']}  {c['title']}")
         print(f"      {c['text'][:110]}")

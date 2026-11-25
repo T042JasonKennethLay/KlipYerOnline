@@ -41,17 +41,22 @@ def game_crop_x(src_w: int, src_h: int, cam_box: tuple[int, int, int, int]) -> i
 
 def build_filter(ass: Path | None = None, cwd: Path | None = None,
                  cam_box: tuple[int, int, int, int] | None = None, src_size: tuple[int, int] | None = None,
-                 zoom: str = "") -> str:
-    """zoom: potongan filter tambahan setelah layout dan sebelum caption (lihat src.fx.zoom_filter)."""
+                 zoom: str = "", pre: str = "") -> str:
+    """zoom: potongan filter tambahan setelah layout dan sebelum caption (lihat src.fx.zoom_filter).
+    pre: filter yang dipasang langsung di video sumber, misal jump cut (select + setpts)."""
+    fc = ""
+    src = "[0:v]"
+    if pre:
+        fc, src = f"[0:v]{pre}[v0];", "[v0]"
     if cam_box and src_size:
         x, y, w, h = cam_box
         gx = game_crop_x(*src_size, cam_box)
-        fc = (f"[0:v]split=2[a][b];"
+        fc += (f"{src}split=2[a][b];"
               f"[a]crop={w}:{h}:{x}:{y},scale={W}:{CAM_H},setsar=1[cam];"
               f"[b]crop=ih*{W}/{GAME_H}:ih:{gx}:0,scale={W}:{GAME_H},setsar=1[game];"
               f"[cam][game]vstack=inputs=2[stack]")
     else:
-        fc = f"[0:v]crop=ih*9/16:ih,scale={W}:{H},setsar=1[stack]"
+        fc += f"{src}crop=ih*9/16:ih,scale={W}:{H},setsar=1[stack]"
     last = "stack"
     if zoom:
         fc += f";[stack]fps=30{zoom}[zoomed]"
@@ -73,10 +78,13 @@ def video_size(src: Path) -> tuple[int, int]:
 
 def render_vertical(src, out: Path, ass: Path | None = None,
                     cam_box: tuple[int, int, int, int] | None = None,
-                    start: float = 0.0, end: float | None = None, fx: dict | None = None) -> Path:
+                    start: float = 0.0, end: float | None = None, fx: dict | None = None,
+                    keep: list[tuple[float, float]] | None = None) -> Path:
     """src: file lokal (Path) atau StreamSource (link langsung, butuh start dan end).
 
     fx: {"punch": detik relatif atau None, "seed": int, "music": bool} untuk SFX, zoom, dan lagu.
+        punch sudah dalam timeline setelah jump cut.
+    keep: potongan yang disimpan [(a, b)] relatif ke awal clip (src.cuts). None = tanpa jump cut.
     """
     out.parent.mkdir(parents=True, exist_ok=True)
     if isinstance(src, Path):
@@ -91,13 +99,26 @@ def render_vertical(src, out: Path, ass: Path | None = None,
     if fx:
         from src.fx import audio_plan, zoom_filter
         zoom = zoom_filter(fx.get("punch"))
-    fc = build_filter(ass.resolve() if ass else None, cwd, cam_box, size if cam_box else None, zoom)
+    cut = keep is not None and len(keep) > 1
+    pre = ""
+    if cut:
+        from src.cuts import select_expr
+        expr = select_expr(keep)
+        pre = f"select='{expr}',setpts=N/FRAME_RATE/TB"
+    fc = build_filter(ass.resolve() if ass else None, cwd, cam_box, size if cam_box else None, zoom, pre)
+    if cut:
+        fc += f";[{amap.rstrip('?')}]aselect='{expr}',asetpts=N/SR/TB[vcut]"
+        amap = "[vcut]"
     if fx:
-        voice = amap.rstrip("?")
+        voice = amap.strip("[]?")
         first = inputs.count("-i")
-        dur = (end - start) if end is not None else float(subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(src)],
-            capture_output=True, text=True).stdout or 0)
+        if cut:
+            from src.cuts import total
+            dur = total(keep)
+        else:
+            dur = (end - start) if end is not None else float(subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(src)],
+                capture_output=True, text=True).stdout or 0)
         extra, afilter = audio_plan(voice, first, fx.get("punch"), dur, fx.get("seed", 0), fx.get("music", True))
         inputs = [*inputs, *extra]
         fc += ";" + afilter

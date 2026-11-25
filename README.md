@@ -9,6 +9,7 @@ AI auto-clipper: kasih link video YouTube, keluar clip vertikal 9:16 yang siap u
 - Video tidak diunduh: ffmpeg baca potongan langsung dari stream YouTube
 - Transkrip per kata (faster-whisper, GPU) untuk caption karaoke
 - Panjang clip mengikuti isi (reaksi cepat sekitar 10 detik, cerita sampai 60 detik)
+- Jump cut otomatis: jeda dan bagian diam dipotong, suara keras di tengah jeda tetap disimpan
 - Efek gaya clipper: boom + zoom di punchline, judul hook, lagu latar yang mengecil saat streamer ngomong
 - Deteksi facecam otomatis (YuNet) + preset per channel
 - Render 9:16: facecam di atas, gameplay di bawah, atau center crop kalau tidak ada facecam
@@ -38,6 +39,7 @@ Opsi:
 
 - `--effects all|sfx|none`: semua efek (default), tanpa lagu, atau polos
 - `--pool N`: jumlah puncak sinyal yang dipakai (default top x 3)
+- `--no-cuts`: tanpa jump cut
 - `--quick`: hanya puncak sinyal, tanpa transkrip dan scan seluruh video (lebih cepat, tapi momen yang tidak keras bisa terlewat)
 - `--upload private|unlisted|public`: langsung upload ke YouTube kamu setelah render
 
