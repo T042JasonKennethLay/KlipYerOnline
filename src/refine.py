@@ -1,8 +1,10 @@
 """Pilih kandidat yang benar-benar menarik dan tentukan batas clip yang pas.
 
-Dengan ANTHROPIC_API_KEY (di .env): Claude baca transkrip semua kandidat sekaligus, membuang yang
-membosankan, lalu memilih awal (hook), akhir (setelah punchline), detik punchline, dan judul.
-Tanpa key: fallback heuristik, batas kalimat yang lebih ketat dan punchline = detik paling keras.
+LLM membaca transkrip semua kandidat sekaligus, membuang yang membosankan, lalu memilih awal (hook),
+akhir (setelah punchline), detik punchline, dan judul. Provider dicoba berurutan sesuai key di .env:
+    ANTHROPIC_API_KEY  -> Claude (bayar per pemakaian)
+    GEMINI_API_KEY     -> Gemini (ada free tier)
+Kalau semua gagal atau tidak ada key: heuristik, batas kalimat lebih ketat dan punchline = detik paling keras.
 
     python -m src.refine <video_id>      # pakai transcript_*.json yang sudah ada di work/<id>/
 """
@@ -10,13 +12,19 @@ import hashlib
 import json
 import os
 import sys
+import urllib.error
+import urllib.request
 
 import numpy as np
 
 from src.boundaries import snap_to_sentences, words_in
 from src.paths import ROOT, work_dir
 
-MODEL = os.getenv("CLIP_LLM_MODEL", "claude-opus-5-5")
+CLAUDE_MODEL = os.getenv("CLIP_LLM_MODEL", "claude-opus-5-5")
+# Model pertama yang tidak sibuk yang dipakai (free tier sering kena 503/429 saat ramai).
+GEMINI_MODELS = [m for m in [os.getenv("GEMINI_MODEL"), "gemini-3.8-flash", "gemini-3.5-flash",
+                             "gemini-flash-latest", "gemini-flash-lite-latest"] if m]
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent"
 MIN_LEN, MAX_LEN = 6.0, 60.0
 TAIL = 0.35          # sisa sedikit setelah kata terakhir supaya tidak kepotong
 
@@ -81,15 +89,19 @@ def load_env() -> None:
             os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
-def has_llm() -> bool:
+def providers() -> list[str]:
+    """Provider LLM yang key-nya ada, urut prioritas."""
     load_env()
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        return False
-    try:
-        import anthropic  # noqa: F401
-    except ImportError:
-        return False
-    return True
+    out = []
+    if os.getenv("ANTHROPIC_API_KEY"):
+        try:
+            import anthropic  # noqa: F401
+            out.append("claude")
+        except ImportError:
+            pass
+    if os.getenv("GEMINI_API_KEY"):
+        out.append("gemini")
+    return out
 
 
 # ---------- bantuan umum ----------
@@ -145,18 +157,19 @@ def heuristic(video_id: str, cands: list[dict]) -> list[dict]:
 
 # ---------- jalur LLM ----------
 
-def ask_claude(cands: list[dict]) -> list[dict]:
-    import anthropic
+def build_prompt(cands: list[dict]) -> str:
+    blocks = [f"<candidate id=\"{i}\" loud_peak=\"{c['t']}\">\n{render_transcript(c['segments'])}\n</candidate>"
+              for i, c in enumerate(cands)]
+    return ("Candidates (times are absolute seconds in the VOD):\n\n" + "\n\n".join(blocks)
+            + "\n\nReturn one entry per candidate id.")
 
-    blocks = []
-    for i, c in enumerate(cands):
-        blocks.append(f"<candidate id=\"{i}\" loud_peak=\"{c['t']}\">\n{render_transcript(c['segments'])}\n</candidate>")
-    prompt = ("Candidates (times are absolute seconds in the VOD):\n\n" + "\n\n".join(blocks)
-              + "\n\nReturn one entry per candidate id.")
+
+def ask_claude(prompt: str) -> list[dict]:
+    import anthropic
 
     client = anthropic.Anthropic()
     resp = client.beta.messages.create(
-        model=MODEL,
+        model=CLAUDE_MODEL,
         max_tokens=16000,
         betas=["server-side-fallback-2026-07-01"],
         fallbacks="default",
@@ -170,6 +183,45 @@ def ask_claude(cands: list[dict]) -> list[dict]:
         raise RuntimeError("jawaban Claude terpotong (max_tokens)")
     text = next(b.text for b in resp.content if b.type == "text")
     return json.loads(text)["clips"]
+
+
+def ask_gemini(prompt: str) -> list[dict]:
+    body = json.dumps({
+        "systemInstruction": {"parts": [{"text": SYSTEM}]},
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"responseMimeType": "application/json", "responseJsonSchema": SCHEMA},
+    }).encode()
+    errors = []
+    for model in dict.fromkeys(GEMINI_MODELS):
+        req = urllib.request.Request(GEMINI_URL.format(model), data=body,
+                                     headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"],
+                                              "Content-Type": "application/json"})
+        try:
+            resp = json.load(urllib.request.urlopen(req, timeout=300))
+        except urllib.error.HTTPError as e:
+            errors.append(f"{model} HTTP {e.code}")
+            if e.code in (404, 429, 500, 503):    # tidak ada / limit / sibuk: coba model berikutnya
+                continue
+            raise RuntimeError(f"Gemini {model} HTTP {e.code}: {e.read()[:300]!r}") from None
+        except TimeoutError:
+            errors.append(f"{model} timeout")
+            continue
+        print(f"  refine pakai {model}", flush=True)
+        return parse_gemini(resp)
+    raise RuntimeError("semua model Gemini gagal: " + ", ".join(errors))
+
+
+def parse_gemini(resp: dict) -> list[dict]:
+    cands = resp.get("candidates") or []
+    if not cands:
+        raise RuntimeError(f"Gemini tidak menjawab: {resp.get('promptFeedback')}")
+    if cands[0].get("finishReason") != "STOP":
+        raise RuntimeError(f"jawaban Gemini berhenti: {cands[0].get('finishReason')}")
+    text = "".join(p.get("text", "") for p in cands[0]["content"]["parts"] if not p.get("thought"))
+    return json.loads(text)["clips"]
+
+
+ASK = {"claude": ask_claude, "gemini": ask_gemini}
 
 
 def apply_llm(video_id: str, cands: list[dict], answers: list[dict]) -> list[dict]:
@@ -202,20 +254,24 @@ def drop_overlaps(clips: list[dict], max_overlap: float = 0.3) -> list[dict]:
 
 
 def refine(video_id: str, cands: list[dict]) -> tuple[list[dict], str]:
-    """cands: [{"t", "score", "segments"}]. Return (clip terurut terbaik dulu, "llm"|"heuristik")."""
+    """cands: [{"t", "score", "segments"}]. Return (clip terurut terbaik dulu, mode yang dipakai)."""
     if not cands:
         return [], "kosong"
-    if not has_llm():
-        return drop_overlaps(heuristic(video_id, cands)), "heuristik"
-
+    prompt = build_prompt(cands)
     key = hashlib.sha1(json.dumps([[c["t"], render_transcript(c["segments"])] for c in cands]).encode()).hexdigest()[:10]
-    cache = work_dir(video_id) / f"refine_{MODEL}_{key}.json"
-    if cache.exists():
-        answers = json.loads(cache.read_text(encoding="utf-8"))
-    else:
-        answers = ask_claude(cands)
-        cache.write_text(json.dumps(answers, ensure_ascii=False, indent=2), encoding="utf-8")
-    return drop_overlaps(apply_llm(video_id, cands, answers)), "llm"
+    for name in providers():
+        cache = work_dir(video_id) / f"refine_{name}_{key}.json"
+        if cache.exists():
+            answers = json.loads(cache.read_text(encoding="utf-8"))
+        else:
+            try:
+                answers = ASK[name](prompt)
+            except Exception as e:  # saldo habis, limit, jaringan: coba provider berikutnya
+                print(f"  refine {name} gagal: {str(e)[:200]}", flush=True)
+                continue
+            cache.write_text(json.dumps(answers, ensure_ascii=False, indent=2), encoding="utf-8")
+        return drop_overlaps(apply_llm(video_id, cands, answers)), name
+    return drop_overlaps(heuristic(video_id, cands)), "heuristik"
 
 
 def main(argv: list[str]) -> None:

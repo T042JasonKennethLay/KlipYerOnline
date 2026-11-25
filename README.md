@@ -5,7 +5,7 @@ AI auto-clipper: kasih link video YouTube, keluar clip vertikal 9:16 yang siap u
 ## Fitur
 
 - Cari momen menarik dari heatmap "Most Replayed" dan lonjakan suara
-- Claude menyaring kandidat yang membosankan, memotong dari hook sampai punchline, dan membuat judul
+- LLM (Claude atau Gemini) menyaring kandidat yang membosankan, memotong dari hook sampai punchline, dan membuat judul
 - Video tidak diunduh: ffmpeg baca potongan langsung dari stream YouTube
 - Transkrip per kata (faster-whisper, GPU) untuk caption karaoke
 - Panjang clip mengikuti isi (reaksi cepat sekitar 10 detik, cerita sampai 60 detik)
@@ -16,7 +16,7 @@ AI auto-clipper: kasih link video YouTube, keluar clip vertikal 9:16 yang siap u
 ## Tech stack
 
 - Python 3.12, yt-dlp, numpy, scipy
-- Claude API (anthropic SDK) untuk memilih dan memotong clip
+- Claude API atau Gemini API untuk memilih dan memotong clip
 - faster-whisper (large-v3-turbo), OpenCV
 - ffmpeg (NVENC kalau ada GPU NVIDIA)
 
@@ -39,7 +39,7 @@ Opsi:
 - `--effects all|sfx|none`: semua efek (default), tanpa lagu, atau polos
 - `--pool N`: jumlah kandidat yang ditranskrip (default top x 3)
 
-Supaya clip dipilih Claude, salin `.env.example` jadi `.env` lalu isi `ANTHROPIC_API_KEY`. Tanpa key, pipeline tetap jalan dengan pemilihan heuristik.
+Supaya clip dipilih LLM, salin `.env.example` jadi `.env` lalu isi `ANTHROPIC_API_KEY` (Claude, berbayar) atau `GEMINI_API_KEY` (Gemini, ada free tier). Kalau Claude gagal, misalnya saldo habis, otomatis pindah ke Gemini. Tanpa key, pipeline tetap jalan dengan pemilihan heuristik.
 
 Lagu dan SFX sendiri ditaruh di `assets/`, lihat [assets/README.md](assets/README.md).
 
