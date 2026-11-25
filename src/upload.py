@@ -71,16 +71,30 @@ def make_metadata(clip: dict, info: dict) -> dict:
     return {"title": title, "description": desc, "tags": tags, "categoryId": CATEGORY_GAMING}
 
 
-def upload_one(yt, path, snippet: dict, privacy: str) -> str:
+QUOTA_REASONS = ("quotaExceeded", "uploadLimitExceeded", "dailyLimitExceeded", "rateLimitExceeded")
+
+
+class QuotaExceeded(RuntimeError):
+    pass
+
+
+def upload_one(yt, path, snippet: dict, privacy: str) -> tuple[str, str]:
+    """Return (video id, status privasi yang benar-benar dipasang YouTube)."""
+    from googleapiclient.errors import HttpError, ResumableUploadError
     from googleapiclient.http import MediaFileUpload
 
     body = {"snippet": snippet, "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False}}
     media = MediaFileUpload(str(path), mimetype="video/mp4", chunksize=-1, resumable=True)
     req = yt.videos().insert(part="snippet,status", body=body, media_body=media)
     resp = None
-    while resp is None:
-        _, resp = req.next_chunk()
-    return resp["id"]
+    try:
+        while resp is None:
+            _, resp = req.next_chunk()
+    except (HttpError, ResumableUploadError) as e:
+        if any(r in str(e) for r in QUOTA_REASONS):
+            raise QuotaExceeded(str(e)[:200]) from None
+        raise
+    return resp["id"], resp.get("status", {}).get("privacyStatus", privacy)
 
 
 def upload_clips(video_id: str, privacy: str = "private", only: list[int] | None = None,
@@ -107,10 +121,15 @@ def upload_clips(video_id: str, privacy: str = "private", only: list[int] | None
             continue
         yt = yt or youtube_client()
         log(f"  upload clip {i}: {meta['title']} ({privacy})")
-        clip["youtube_id"] = upload_one(yt, path, meta, privacy)
-        clip["youtube_privacy"] = privacy
+        try:
+            clip["youtube_id"], clip["youtube_privacy"] = upload_one(yt, path, meta, privacy)
+        except QuotaExceeded as e:
+            left = sum(1 for c in info["clips"] if not c.get("youtube_id"))
+            log(f"  kuota YouTube habis, berhenti. Sisa {left} clip, jalankan perintah yang sama besok.\n  ({e})")
+            break
         summary.write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")   # simpan tiap clip
-        log(f"    https://youtu.be/{clip['youtube_id']}")
+        note = "" if clip["youtube_privacy"] == privacy else f"  (YouTube memasang: {clip['youtube_privacy']})"
+        log(f"    https://youtu.be/{clip['youtube_id']}{note}")
         done.append(clip)
     return done
 

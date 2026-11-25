@@ -18,7 +18,7 @@ from src.ingest import (StreamSource, download_audio, download_section, grab_pro
                         stream_source)
 from src.paths import out_dir, work_dir
 from src.reframe import preset_or_detect
-from src.refine import providers, refine
+from src.refine import providers, refine, retitle
 from src.render import render_vertical
 from src.scan import build_candidates, scan, transcribe_full
 from src.score import find_candidates
@@ -58,11 +58,11 @@ def scan_candidates(meta: dict, audio, pool: int) -> list[dict]:
     """Mode penuh: transkrip seluruh video, LLM membaca semuanya, puncak sinyal jadi petunjuk."""
     log("transkrip seluruh video")
     segs = transcribe_full(meta["id"], audio, meta["duration"], log)
-    peaks = find_candidates(meta, k=pool)
+    peaks = find_candidates(meta, k=min(pool, 30))
     moments = scan(meta, segs, [p["t"] for p in peaks], log)
     if not moments:
         return []
-    cands = build_candidates(segs, moments, peaks)
+    cands = build_candidates(segs, moments, peaks, max_cands=max(30, pool))
     n_scan = sum(c["src"] == "scan" for c in cands)
     log(f"{len(cands)} kandidat ({n_scan} dari scan LLM, {len(cands) - n_scan} dari sinyal)")
     return cands
@@ -81,8 +81,11 @@ def plan_clips(meta: dict, top: int, pool: int | None = None, quick: bool = Fals
     for c in clips[:top]:
         words = words_in(c["segments"], c["start"], c["end"])
         text = " ".join(w["word"] for w in words)
-        log(f"  {fmt(c['start'])}-{fmt(c['end'])} ({c['end'] - c['start']:.0f}s) {c['title']!r} {c['reason']}")
         plans.append({k: v for k, v in c.items() if k != "segments"} | {"words": words, "text": text})
+    if mode != "heuristik":
+        plans = retitle(meta["id"], plans, context=f"Video: {meta['title']} by {meta['channel']}")
+    for p in plans:
+        log(f"  {fmt(p['start'])}-{fmt(p['end'])} ({p['end'] - p['start']:.0f}s) {p['title']!r} {p['reason']}")
     return plans
 
 
