@@ -24,7 +24,9 @@ AUDIO_EXT = {".mp3", ".wav", ".m4a", ".ogg", ".flac"}
 
 MUSIC_VOL = 0.14      # sekitar -17 dB di bawah suara streamer, lalu ditekan lagi saat ada suara
 BOOM_VOL = 0.75
-WHOOSH_VOL = 0.45
+WHOOSH_VOL = 0.25
+LOUDNESS = -14     # LUFS, target YouTube. Semua clip volumenya sama
+GEN_VERSION = 2    # naikkan kalau resep SFX buatan berubah (file lama tidak dipakai lagi)
 ZOOM = 0.14           # zoom punch 14 persen, lalu kembali dalam sekitar 0.3 detik
 
 # Sintesis sederhana: sinus yang nadanya turun + transien noise + saturasi + sedikit gema.
@@ -34,12 +36,13 @@ GENERATED = {
              "asoftclip=type=tanh:threshold=0.6,lowpass=f=900,aecho=0.8:0.5:60|120:0.3|0.2,"
              "loudnorm=I=-14:TP=-1.5"),
     "whoosh": ("aevalsrc='(random(0)*2-1)*exp(-pow((t-0.32)/0.13,2))':s=48000:d=0.65",
-               "highpass=f=400,lowpass=f=5000,loudnorm=I=-20:TP=-3"),
+               "highpass=f=300,lowpass=f=2500,afade=t=in:d=0.15,afade=t=out:st=0.4:d=0.25,"
+               "loudnorm=I=-22:TP=-4"),
 }
 
 
 def generate(kind: str) -> Path:
-    out = GEN_DIR / f"{kind}.wav"
+    out = GEN_DIR / f"{kind}_v{GEN_VERSION}.wav"
     if not out.exists():
         GEN_DIR.mkdir(parents=True, exist_ok=True)
         src, af = GENERATED[kind]
@@ -81,7 +84,9 @@ def audio_plan(voice: str, first: int, punch: float | None, duration: float, see
     """
     rng = random.Random(seed)
     inputs: list[str] = []
-    chains = [f"[{voice}]aresample=48000,asplit=2[voice][sc]"]
+    # Mic streamer sering pecah waktu teriak (clipping di stream aslinya): perbaiki dulu.
+    clean = "adeclip,aresample=48000"
+    chains = [f"[{voice}]{clean},asplit=2[voice][sc]"]
     mix = ["[voice]"]
     idx = first
 
@@ -94,7 +99,7 @@ def audio_plan(voice: str, first: int, punch: float | None, duration: float, see
         mix.append("[duck]")
         idx += 1
     else:
-        chains[0] = f"[{voice}]aresample=48000[voice]"
+        chains[0] = f"[{voice}]{clean}[voice]"
 
     inputs += ["-i", str(pick_sfx("whoosh", rng))]
     chains.append(f"[{idx}:a]aresample=48000,volume={WHOOSH_VOL}[wh]")
@@ -109,7 +114,7 @@ def audio_plan(voice: str, first: int, punch: float | None, duration: float, see
         idx += 1
 
     chains.append(f"{''.join(mix)}amix=inputs={len(mix)}:normalize=0:duration=first,"
-                  "alimiter=limit=0.95[aout]")
+                  f"loudnorm=I={LOUDNESS}:TP=-1.5:LRA=11,aresample=48000,alimiter=limit=0.89[aout]")
     return inputs, ";".join(chains)
 
 
