@@ -17,7 +17,7 @@ import numpy as np
 
 from src.ingest import download_audio, load_or_fetch_metadata
 from src.paths import work_dir
-from src.refine import ask_json
+from src.refine import VOICE_RULE, ask_json
 from src.signals import load_or_compute_loudness, loudness_spike
 from src.transcribe import cut_audio, transcribe_window
 
@@ -41,7 +41,7 @@ anything that needs earlier context.
 For each moment give start (the setup line that hooks the viewer), end (right after the payoff and
 reaction), score 0 to 10 (how likely a stranger watches to the end), and a short reason. Moments
 are usually 10 to 45 seconds. Return fewer moments if the section is weak; return none if nothing
-is good. Use only times that appear in the transcript."""
+is good. Use only times that appear in the transcript.""" + "\n\n" + VOICE_RULE
 
 SCHEMA = {
     "type": "object",
@@ -86,7 +86,8 @@ def annotate(segs: list[dict], spike: np.ndarray) -> str:
     for s in segs:
         a, b = int(s["start"]), max(int(s["end"]), int(s["start"]) + 1)
         loud = spike[a:b].max() >= LOUD_DB if a < len(spike) else False
-        lines.append(f"[{s['start']:.1f}] {s['text'].strip()}" + (" [LOUD]" if loud else ""))
+        other = " [likely not streamer]" if s.get("speaker") == "other" else ""
+        lines.append(f"[{s['start']:.1f}] {s['text'].strip()}{other}" + (" [LOUD]" if loud else ""))
     return "\n".join(lines)
 
 

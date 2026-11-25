@@ -14,14 +14,15 @@ import warnings
 
 from src.boundaries import words_in
 from src.captions import build_ass
-from src.cuts import plan_keep, remap, remap_words, total
+from src.cuts import extend_end, plan_keep, remap, remap_words, total
 from src.ingest import (StreamSource, download_audio, download_section, grab_probe, load_or_fetch_metadata,
                         stream_source)
 from src.paths import out_dir, work_dir
 from src.reframe import preset_or_detect
-from src.refine import providers, refine, retitle
+from src.refine import MAX_LEN, providers, refine, review
 from src.render import render_vertical
 from src.scan import build_candidates, scan, transcribe_full
+from src.speaker import label_segments
 from src.score import find_candidates
 from src.transcribe import transcribe_candidate
 
@@ -59,6 +60,8 @@ def scan_candidates(meta: dict, audio, pool: int) -> list[dict]:
     """Mode penuh: transkrip seluruh video, LLM membaca semuanya, puncak sinyal jadi petunjuk."""
     log("transkrip seluruh video")
     segs = transcribe_full(meta["id"], audio, meta["duration"], log)
+    log("kenali suara streamer vs suara game atau orang lain")
+    segs = label_segments(meta["id"], audio, segs, log)
     peaks = find_candidates(meta, k=min(pool, 30))
     moments = scan(meta, segs, [p["t"] for p in peaks], log)
     if not moments:
@@ -76,15 +79,21 @@ def plan_clips(meta: dict, top: int, pool: int | None = None, quick: bool = Fals
     cands = [] if quick or not providers() else scan_candidates(meta, audio, pool)
     if not cands:
         cands = peak_candidates(meta, audio, pool)
-    clips, mode = refine(meta["id"], cands, context=f"Video: {meta['title']} by {meta['channel']}")
+    ctx = f"Video: {meta['title']} by {meta['channel']}"
+    clips, mode = refine(meta["id"], cands, context=ctx)
     log(f"refine ({mode}): {len(clips)} dari {len(cands)} kandidat layak")
-    plans = []
-    for c in clips[:top]:
-        words = words_in(c["segments"], c["start"], c["end"])
-        text = " ".join(w["word"] for w in words)
-        plans.append({k: v for k, v in c.items() if k != "segments"} | {"words": words, "text": text})
+    picked = clips[:top]
     if mode != "heuristik":
-        plans = retitle(meta["id"], plans, context=f"Video: {meta['title']} by {meta['channel']}")
+        picked = review(meta["id"], clips[:top + max(3, top // 2)], context=ctx)[:top]   # sisakan cadangan
+        log(f"review editor: {len(picked)} clip dipakai")
+    plans = []
+    for c in picked:
+        end = extend_end(audio, c["start"], c["end"])          # reaksi setelah kata terakhir ikut
+        hi = c["segments"][-1]["end"] + 1.0
+        end = min(end, hi, c["start"] + MAX_LEN)
+        words = words_in(c["segments"], c["start"], end)
+        text = " ".join(w["word"] for w in words)
+        plans.append({k: v for k, v in c.items() if k != "segments"} | {"end": end, "words": words, "text": text})
     for p in plans:
         log(f"  {fmt(p['start'])}-{fmt(p['end'])} ({p['end'] - p['start']:.0f}s) {p['title']!r} {p['reason']}")
     return plans

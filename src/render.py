@@ -98,7 +98,11 @@ def render_vertical(src, out: Path, ass: Path | None = None,
     zoom = ""
     if fx:
         from src.fx import audio_plan, zoom_filter
-        zoom = zoom_filter(fx.get("punch"))
+        alt = None
+        if keep is not None and len(keep) > 1:
+            from src.cuts import new_segments
+            alt = new_segments(keep)[1::2]     # potongan ganjil sedikit zoom: cut terlihat disengaja
+        zoom = zoom_filter(fx.get("punch"), alt)
     cut = keep is not None and len(keep) > 1
     pre = ""
     if cut:
@@ -107,7 +111,8 @@ def render_vertical(src, out: Path, ass: Path | None = None,
         pre = f"select='{expr}',setpts=N/FRAME_RATE/TB"
     fc = build_filter(ass.resolve() if ass else None, cwd, cam_box, size if cam_box else None, zoom, pre)
     if cut:
-        fc += f";[{amap.rstrip('?')}]aselect='{expr}',asetpts=N/SR/TB[vcut]"
+        from src.cuts import audio_cut_filter
+        fc += ";" + audio_cut_filter(amap.rstrip("?"), keep, "vcut")
         amap = "[vcut]"
     if fx:
         voice = amap.strip("[]?")

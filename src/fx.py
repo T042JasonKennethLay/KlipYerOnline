@@ -68,11 +68,20 @@ def pick_music(rng: random.Random) -> Path | None:
     return rng.choice(own) if own else None
 
 
-def zoom_filter(punch: float | None) -> str:
-    """Zoom punch di detik `punch` (relatif ke awal clip). Dipasang sebelum caption."""
-    if punch is None:
+CUT_ZOOM = 0.07       # punch-in 7 persen di potongan ganjil setelah jump cut
+
+
+def zoom_filter(punch: float | None, alt: list[tuple[float, float]] | None = None) -> str:
+    """Zoom punch di detik `punch` (relatif ke awal clip), plus zoom tetap di potongan `alt`
+    (jump cut punch-in). Semua waktu di timeline setelah dipotong. Dipasang sebelum caption."""
+    terms = []
+    if alt:
+        terms.append(f"{CUT_ZOOM}*(" + "+".join(f"between(it,{a:.2f},{b - 0.01:.2f})" for a, b in alt) + ")")
+    if punch is not None:
+        terms.append(f"{ZOOM}*gte(it,{punch:.2f})*exp(-10*max(0,it-{punch:.2f}))")
+    if not terms:
         return ""
-    z = f"1+{ZOOM}*gte(it,{punch:.2f})*exp(-10*max(0,it-{punch:.2f}))"
+    z = "1+" + "+".join(terms)
     return (f",zoompan=z='{z}':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=1080x1920:fps=30")
 
 
