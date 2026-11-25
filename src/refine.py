@@ -51,7 +51,9 @@ For every candidate decide:
   from the clip like "\"i don't know him\" 💀💀", or "speed did kai dirty 😭😭". Use 💀 for
   absurd or brutal moments and 🥀 (wilted rose) for losses, fails, sadness, or someone getting
   humbled; 😭 and 🙏 also fit. One or two emojis at the end, one word in CAPS is fine.
-  No hashtags. Do not invent things that are not in the transcript.
+  The patterns are templates: never copy an example title word for word, every title must point
+  at something specific in this clip (a person, object, or line). Never use slurs or censored
+  slurs (like n****). No hashtags. Do not invent things that are not in the transcript.
 - reason: one short sentence.
 
 Length must follow the content, not a target. A quick reaction can be 7 to 15 seconds, a normal
@@ -276,6 +278,47 @@ def ask_json(system: str, prompt: str, schema: dict, cache) -> tuple[dict | None
     return None, "heuristik"
 
 
+RETITLE_SYSTEM = """You write the final titles for a batch of vertical short clips that will be posted on
+the same YouTube channel. You see every clip's transcript at once.
+
+Style: Gen Z internet humor like top streamer clip channels. Lowercase and casual, 2 to 7 words,
+at most 45 characters, a gimmick that makes people curious about the payoff instead of a summary.
+Ironic, dramatic, or deadpan. One or two emojis at the end: 💀 for absurd or brutal moments, 🥀 for
+losses, fails, sadness, or getting humbled, 😭 or 🙏 also fit. One word in CAPS is fine.
+
+Hard rules:
+- Every title in the batch must be different, and no two may share the same phrase or template.
+- Each title points at something specific in its own clip (a person, object, place, or line).
+- Never use slurs or censored slurs (like n****), and no hashtags.
+- Do not invent things that are not in the transcript."""
+
+RETITLE_SCHEMA = {
+    "type": "object",
+    "properties": {"titles": {"type": "array", "items": {
+        "type": "object",
+        "properties": {"id": {"type": "integer"}, "title": {"type": "string"}},
+        "required": ["id", "title"], "additionalProperties": False}}},
+    "required": ["titles"],
+    "additionalProperties": False,
+}
+
+
+def retitle(video_id: str, clips: list[dict], context: str = "") -> list[dict]:
+    """Satu panggilan untuk semua clip final supaya judul unik dan tidak menyalin contoh.
+    clips: [{"title", "text", ...}]. Kalau LLM gagal, judul lama dipakai."""
+    if len(clips) < 2:
+        return clips
+    blocks = [f"<clip id=\"{i}\" draft_title=\"{c.get('title', '')}\">\n{c.get('text', '')[:1200]}\n</clip>"
+              for i, c in enumerate(clips)]
+    prompt = (context + "\n\n" if context else "") + "\n\n".join(blocks) + "\n\nReturn one title per clip id."
+    key = hashlib.sha1(prompt.encode()).hexdigest()[:10]
+    answer, _ = ask_json(RETITLE_SYSTEM, prompt, RETITLE_SCHEMA, work_dir(video_id) / f"retitle_{key}.json")
+    if not answer:
+        return clips
+    new = {a["id"]: a["title"].strip() for a in answer["titles"] if isinstance(a.get("id"), int)}
+    return [{**c, "title": new.get(i) or c.get("title", "")} for i, c in enumerate(clips)]
+
+
 def apply_llm(video_id: str, cands: list[dict], answers: list[dict]) -> list[dict]:
     out = []
     for a in answers:
@@ -305,17 +348,29 @@ def drop_overlaps(clips: list[dict], max_overlap: float = 0.3) -> list[dict]:
     return kept
 
 
+BATCH = 25     # kandidat per request; jawaban JSON untuk puluhan kandidat bisa terpotong
+
+
 def refine(video_id: str, cands: list[dict], context: str = "") -> tuple[list[dict], str]:
     """cands: [{"t", "score", "segments"}]. Return (clip terurut terbaik dulu, mode yang dipakai).
-    context: info video (judul, channel) supaya LLM paham konteksnya."""
+    context: info video (judul, channel) supaya LLM paham konteksnya.
+    Kandidat banyak dinilai per kelompok BATCH, lalu semua hasil diurutkan bersama."""
     if not cands:
         return [], "kosong"
-    prompt = (context + "\n\n" if context else "") + build_prompt(cands)
-    key = hashlib.sha1(prompt.encode()).hexdigest()[:10]
-    answer, name = ask_json(SYSTEM, prompt, SCHEMA, work_dir(video_id) / f"refine_{key}.json")
-    if answer is None:
-        return drop_overlaps(heuristic(video_id, cands)), "heuristik"
-    return drop_overlaps(apply_llm(video_id, cands, answer["clips"])), name
+    out, modes = [], set()
+    for i in range(0, len(cands), BATCH):
+        part = cands[i:i + BATCH]
+        prompt = (context + "\n\n" if context else "") + build_prompt(part)
+        key = hashlib.sha1(prompt.encode()).hexdigest()[:10]
+        answer, name = ask_json(SYSTEM, prompt, SCHEMA, work_dir(video_id) / f"refine_{key}.json")
+        if answer is None:
+            out += heuristic(video_id, part)
+            modes.add("heuristik")
+        else:
+            out += apply_llm(video_id, part, answer["clips"])
+            modes.add("llm" if name == "cache" else name)
+    out.sort(key=lambda c: (-(c["llm_score"] if c["llm_score"] is not None else -1), -c["score"]))
+    return drop_overlaps(out), "+".join(sorted(modes))
 
 
 def main(argv: list[str]) -> None:
