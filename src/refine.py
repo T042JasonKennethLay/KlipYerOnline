@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -42,8 +43,15 @@ For every candidate decide:
 - end: absolute second right after the payoff and the immediate reaction. Cut as soon as the
   energy drops.
 - punchline: absolute second of the single funniest or loudest beat (a sound effect goes there).
-- title: short hook title in the streamer's language, at most 45 characters, no hashtags, no
-  emojis, do not invent things that are not in the transcript.
+- title: Shorts title in Gen Z internet humor, like the top clip channels (examples are given when
+  available). Lowercase and casual, 2 to 7 words, at most 45 characters. It is a gimmick, not a
+  summary: ironic, dramatic, or deadpan, and it makes people curious about the payoff. Patterns
+  that work: "bro thought he was him 💀", "he's cooked 💀🥀", "it's over for him 🥀",
+  "nah bro was NOT ready 😭", "-1000 aura 💀", "chat is this real 🥀", "pain. 🥀", a quoted line
+  from the clip like "\"i don't know him\" 💀💀", or "speed did kai dirty 😭😭". Use 💀 for
+  absurd or brutal moments and 🥀 (wilted rose) for losses, fails, sadness, or someone getting
+  humbled; 😭 and 🙏 also fit. One or two emojis at the end, one word in CAPS is fine.
+  No hashtags. Do not invent things that are not in the transcript.
 - reason: one short sentence.
 
 Length must follow the content, not a target. A quick reaction can be 7 to 15 seconds, a normal
@@ -160,7 +168,12 @@ def heuristic(video_id: str, cands: list[dict]) -> list[dict]:
 def build_prompt(cands: list[dict]) -> str:
     blocks = [f"<candidate id=\"{i}\" center=\"{c['t']}\">\n{render_transcript(c['segments'])}\n</candidate>"
               for i, c in enumerate(cands)]
-    return ("Candidates (times are absolute seconds in the VOD):\n\n" + "\n\n".join(blocks)
+    from src.trends import title_examples
+
+    examples = title_examples()
+    style = ("Titles of top performing streamer clip Shorts right now (style reference only, do not copy):\n"
+             + "\n".join(f"- {t}" for t in examples) + "\n\n") if examples else ""
+    return (style + "Candidates (times are absolute seconds in the VOD):\n\n" + "\n\n".join(blocks)
             + "\n\nReturn one entry per candidate id.")
 
 
@@ -191,6 +204,21 @@ def ask_gemini(system: str, prompt: str, schema: dict) -> dict:
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {"responseMimeType": "application/json", "responseJsonSchema": schema},
     }).encode()
+    for attempt in range(2):
+        try:
+            return gemini_once(body)
+        except RateLimited as e:
+            if attempt:
+                raise RuntimeError(str(e)) from None
+            print("  gemini kena limit per menit, tunggu 60 s lalu coba lagi", flush=True)
+            time.sleep(60)
+
+
+class RateLimited(RuntimeError):
+    pass
+
+
+def gemini_once(body: bytes) -> dict:
     errors = []
     for model in dict.fromkeys(GEMINI_MODELS):
         req = urllib.request.Request(GEMINI_URL.format(model), data=body,
@@ -208,7 +236,10 @@ def ask_gemini(system: str, prompt: str, schema: dict) -> dict:
             continue
         print(f"  llm pakai {model}", flush=True)
         return parse_gemini(resp)
-    raise RuntimeError("semua model Gemini gagal: " + ", ".join(errors))
+    msg = "semua model Gemini gagal: " + ", ".join(errors)
+    if any("429" in e or "503" in e for e in errors):
+        raise RateLimited(msg)
+    raise RuntimeError(msg)
 
 
 def parse_gemini(resp: dict) -> list[dict]:

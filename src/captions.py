@@ -51,7 +51,7 @@ def chunk_words(words: list[dict], size: int) -> list[list[dict]]:
 
 def title_event(title: str, y: int) -> str:
     """Judul hitam di kotak putih (gaya clipper), muncul dengan pop lalu fade out."""
-    txt = re.sub(r"[{}\\]", "", title).strip().upper()
+    txt = re.sub(r"[{}\\]", "", title).strip()     # kapitalisasi asli: gaya judul Gen Z sering huruf kecil
     tags = f"{{\\an8\\q0\\pos(540,{y})\\fscx90\\fscy90\\t(0,120,\\fscx100\\fscy100)\\fad(0,250)}}"
     return f"Dialogue: 1,{ass_time(0)},{ass_time(TITLE_SECS)},Title,,0,0,0,,{tags}{txt}"
 

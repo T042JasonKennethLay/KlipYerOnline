@@ -49,21 +49,25 @@ def clean_title(text: str) -> str:
 
 
 def make_metadata(clip: dict, info: dict) -> dict:
-    """Judul hook + #shorts, deskripsi dengan kredit ke video sumber."""
+    """Gaya clip channel teratas (data/trends): judul hook pendek tanpa nama channel, hashtag di
+    deskripsi (#shorts, nama streamer, lalu hashtag yang sedang ramai), kredit ke video sumber."""
+    from src.trends import top_hashtags
+
     channel = info.get("channel") or ""
-    base = clean_title(clip.get("title") or info["title"])
-    suffix = f" | {channel} #shorts" if channel else " #shorts"
-    title = (base[:TITLE_MAX - len(suffix)].rstrip() + suffix) if len(base) + len(suffix) > TITLE_MAX else base + suffix
-    tag = re.sub(r"[^a-z0-9]", "", channel.lower())
+    title = clean_title(clip.get("title") or info["title"])[:TITLE_MAX]
+    tag = "#" + re.sub(r"[^a-z0-9]", "", channel.lower()) if channel else ""
+    src_text = re.sub(r"[^a-z0-9]", "", f"{info['title']} {channel}".lower())
+    relevant = [h for h in top_hashtags(30) if h[1:] in src_text]     # misal #ishowspeed untuk video Speed
+    tags_line = list(dict.fromkeys(t for t in ["#shorts", tag, *relevant, "#twitch"] if t))[:5]
     desc = "\n".join([
-        base,
+        title,
         "",
-        f"Sumber: {info['title']}" + (f" ({channel})" if channel else ""),
+        f"Full stream: {info['title']}" + (f" ({channel})" if channel else ""),
         clip["link"],
         "",
-        " ".join(t for t in ["#shorts", f"#{tag}" if tag else "", "#gaming"] if t),
+        " ".join(tags_line),
     ])
-    tags = [t for t in [channel, "shorts", "gaming", "clips"] if t]
+    tags = [t for t in [channel, "shorts", "streamer clips", "twitch", "funny moments"] if t]
     return {"title": title, "description": desc, "tags": tags, "categoryId": CATEGORY_GAMING}
 
 
