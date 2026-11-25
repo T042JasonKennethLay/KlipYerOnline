@@ -22,7 +22,7 @@ from src.paths import ROOT, work_dir
 
 CLAUDE_MODEL = os.getenv("CLIP_LLM_MODEL", "claude-opus-5-5")
 # Model pertama yang tidak sibuk yang dipakai (free tier sering kena 503/429 saat ramai).
-GEMINI_MODELS = [m for m in [os.getenv("GEMINI_MODEL"), "gemini-3.8-flash", "gemini-3.5-flash",
+GEMINI_MODELS = [m for m in [os.getenv("GEMINI_MODEL"), "gemini-3.5-flash", "gemini-3.8-flash",
                              "gemini-flash-latest", "gemini-flash-lite-latest"] if m]
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent"
 MIN_LEN, MAX_LEN = 6.0, 60.0
@@ -158,13 +158,13 @@ def heuristic(video_id: str, cands: list[dict]) -> list[dict]:
 # ---------- jalur LLM ----------
 
 def build_prompt(cands: list[dict]) -> str:
-    blocks = [f"<candidate id=\"{i}\" loud_peak=\"{c['t']}\">\n{render_transcript(c['segments'])}\n</candidate>"
+    blocks = [f"<candidate id=\"{i}\" center=\"{c['t']}\">\n{render_transcript(c['segments'])}\n</candidate>"
               for i, c in enumerate(cands)]
     return ("Candidates (times are absolute seconds in the VOD):\n\n" + "\n\n".join(blocks)
             + "\n\nReturn one entry per candidate id.")
 
 
-def ask_claude(prompt: str) -> list[dict]:
+def ask_claude(system: str, prompt: str, schema: dict) -> dict:
     import anthropic
 
     client = anthropic.Anthropic()
@@ -173,8 +173,8 @@ def ask_claude(prompt: str) -> list[dict]:
         max_tokens=16000,
         betas=["server-side-fallback-2026-07-01"],
         fallbacks="default",
-        output_config={"effort": "medium", "format": {"type": "json_schema", "schema": SCHEMA}},
-        system=SYSTEM,
+        output_config={"effort": "medium", "format": {"type": "json_schema", "schema": schema}},
+        system=system,
         messages=[{"role": "user", "content": prompt}],
     )
     if resp.stop_reason == "refusal":
@@ -182,14 +182,14 @@ def ask_claude(prompt: str) -> list[dict]:
     if resp.stop_reason == "max_tokens":
         raise RuntimeError("jawaban Claude terpotong (max_tokens)")
     text = next(b.text for b in resp.content if b.type == "text")
-    return json.loads(text)["clips"]
+    return json.loads(text)
 
 
-def ask_gemini(prompt: str) -> list[dict]:
+def ask_gemini(system: str, prompt: str, schema: dict) -> dict:
     body = json.dumps({
-        "systemInstruction": {"parts": [{"text": SYSTEM}]},
+        "systemInstruction": {"parts": [{"text": system}]},
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"responseMimeType": "application/json", "responseJsonSchema": SCHEMA},
+        "generationConfig": {"responseMimeType": "application/json", "responseJsonSchema": schema},
     }).encode()
     errors = []
     for model in dict.fromkeys(GEMINI_MODELS):
@@ -197,16 +197,16 @@ def ask_gemini(prompt: str) -> list[dict]:
                                      headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"],
                                               "Content-Type": "application/json"})
         try:
-            resp = json.load(urllib.request.urlopen(req, timeout=300))
+            resp = json.load(urllib.request.urlopen(req, timeout=120))
         except urllib.error.HTTPError as e:
             errors.append(f"{model} HTTP {e.code}")
             if e.code in (404, 429, 500, 503):    # tidak ada / limit / sibuk: coba model berikutnya
                 continue
             raise RuntimeError(f"Gemini {model} HTTP {e.code}: {e.read()[:300]!r}") from None
-        except TimeoutError:
-            errors.append(f"{model} timeout")
+        except (TimeoutError, ConnectionError, urllib.error.URLError, OSError) as e:
+            errors.append(f"{model} {type(e).__name__}")    # menggantung / koneksi putus
             continue
-        print(f"  refine pakai {model}", flush=True)
+        print(f"  llm pakai {model}", flush=True)
         return parse_gemini(resp)
     raise RuntimeError("semua model Gemini gagal: " + ", ".join(errors))
 
@@ -218,10 +218,31 @@ def parse_gemini(resp: dict) -> list[dict]:
     if cands[0].get("finishReason") != "STOP":
         raise RuntimeError(f"jawaban Gemini berhenti: {cands[0].get('finishReason')}")
     text = "".join(p.get("text", "") for p in cands[0]["content"]["parts"] if not p.get("thought"))
-    return json.loads(text)["clips"]
+    return json.loads(text)
 
 
 ASK = {"claude": ask_claude, "gemini": ask_gemini}
+DEAD: set[str] = set()
+
+
+def ask_json(system: str, prompt: str, schema: dict, cache) -> tuple[dict | None, str]:
+    """Coba provider berurutan, simpan jawaban di `cache`. Return (jawaban atau None, nama provider)."""
+    if cache.exists():
+        return json.loads(cache.read_text(encoding="utf-8")), "cache"
+    for name in providers():
+        if name in DEAD:
+            continue
+        try:
+            answer = ASK[name](system, prompt, schema)
+        except Exception as e:  # saldo habis, limit, jaringan: coba provider berikutnya
+            msg = str(e)
+            print(f"  {name} gagal: {msg[:160]}", flush=True)
+            if any(k in msg.lower() for k in ("credit balance", "api key", "authentication", "permission")):
+                DEAD.add(name)    # tidak akan berhasil selama proses ini, jangan dicoba lagi
+            continue
+        cache.write_text(json.dumps(answer, ensure_ascii=False, indent=2), encoding="utf-8")
+        return answer, name
+    return None, "heuristik"
 
 
 def apply_llm(video_id: str, cands: list[dict], answers: list[dict]) -> list[dict]:
@@ -253,25 +274,17 @@ def drop_overlaps(clips: list[dict], max_overlap: float = 0.3) -> list[dict]:
     return kept
 
 
-def refine(video_id: str, cands: list[dict]) -> tuple[list[dict], str]:
-    """cands: [{"t", "score", "segments"}]. Return (clip terurut terbaik dulu, mode yang dipakai)."""
+def refine(video_id: str, cands: list[dict], context: str = "") -> tuple[list[dict], str]:
+    """cands: [{"t", "score", "segments"}]. Return (clip terurut terbaik dulu, mode yang dipakai).
+    context: info video (judul, channel) supaya LLM paham konteksnya."""
     if not cands:
         return [], "kosong"
-    prompt = build_prompt(cands)
-    key = hashlib.sha1(json.dumps([[c["t"], render_transcript(c["segments"])] for c in cands]).encode()).hexdigest()[:10]
-    for name in providers():
-        cache = work_dir(video_id) / f"refine_{name}_{key}.json"
-        if cache.exists():
-            answers = json.loads(cache.read_text(encoding="utf-8"))
-        else:
-            try:
-                answers = ASK[name](prompt)
-            except Exception as e:  # saldo habis, limit, jaringan: coba provider berikutnya
-                print(f"  refine {name} gagal: {str(e)[:200]}", flush=True)
-                continue
-            cache.write_text(json.dumps(answers, ensure_ascii=False, indent=2), encoding="utf-8")
-        return drop_overlaps(apply_llm(video_id, cands, answers)), name
-    return drop_overlaps(heuristic(video_id, cands)), "heuristik"
+    prompt = (context + "\n\n" if context else "") + build_prompt(cands)
+    key = hashlib.sha1(prompt.encode()).hexdigest()[:10]
+    answer, name = ask_json(SYSTEM, prompt, SCHEMA, work_dir(video_id) / f"refine_{key}.json")
+    if answer is None:
+        return drop_overlaps(heuristic(video_id, cands)), "heuristik"
+    return drop_overlaps(apply_llm(video_id, cands, answer["clips"])), name
 
 
 def main(argv: list[str]) -> None:
