@@ -63,12 +63,9 @@ def plan_clips(meta: dict, top: int, pool: int | None = None) -> list[dict]:
 
 
 def facecam(meta: dict, src, s: float, cam_cache: dict):
-    """Preset channel kalau ada, kalau tidak deteksi sekali per video dari potongan 20 detik."""
+    """Deteksi sekali per video dari potongan 20 detik. Preset channel dipakai kalau wajahnya cocok."""
     if "box" not in cam_cache:
-        from src.reframe import load_preset
-        if load_preset(meta["channel"]):
-            probe = None
-        elif isinstance(src, StreamSource):
+        if isinstance(src, StreamSource):
             probe = grab_probe(src, s, work_dir(meta["id"]) / f"probe_{int(s)}.mp4")
         else:
             probe = src
