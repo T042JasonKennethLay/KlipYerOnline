@@ -7,3 +7,5 @@ nvidia-cublas-cu12>=12.4
 nvidia-cudnn-cu12>=9,<10
 opencv-python-headless>=4.10
 anthropic>=2.0
+google-api-python-client>=2.200
+google-auth-oauthlib>=1.2

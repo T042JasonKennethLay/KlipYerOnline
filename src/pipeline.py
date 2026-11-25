@@ -151,10 +151,23 @@ def run(url: str, top: int = 3, pool: int | None = None, effects: str = "all",
         log(f"render clip {i}/{len(plans)}: {fmt(p['start'])}-{fmt(p['end'])} "
             f"via {clips[-1]['source']} ({time.time() - t:.0f} s)")
     summary = out_dir(meta["id"]) / "clips.json"
-    summary.write_text(json.dumps({"video": meta["id"], "title": meta["title"], "clips": clips},
+    keep_uploads(summary, clips)
+    summary.write_text(json.dumps({"video": meta["id"], "title": meta["title"], "channel": meta["channel"],
+                                   "clips": clips},
                                   ensure_ascii=False, indent=2), encoding="utf-8")
     log(f"selesai: {len(clips)} clip di out/{meta['id']}/ ({time.time() - t0:.0f} s)")
     return clips
+
+
+def keep_uploads(summary, clips: list[dict]) -> None:
+    """Jalan ulang menimpa clips.json. Bawa catatan upload lama supaya clip yang sama tidak di-upload dua kali."""
+    if not summary.exists():
+        return
+    old = {(c["start"], c["end"]): c for c in json.loads(summary.read_text(encoding="utf-8"))["clips"]}
+    for c in clips:
+        prev = old.get((c["start"], c["end"]))
+        if prev and prev.get("youtube_id"):
+            c["youtube_id"], c["youtube_privacy"] = prev["youtube_id"], prev.get("youtube_privacy")
 
 
 def main() -> None:
@@ -167,10 +180,19 @@ def main() -> None:
                     help="all = SFX + zoom + lagu (default), sfx = tanpa lagu, none = polos")
     ap.add_argument("--quick", action="store_true",
                     help="hanya puncak sinyal, tanpa transkrip dan scan LLM seluruh video (lebih cepat)")
+    ap.add_argument("--upload", choices=["private", "unlisted", "public"],
+                    help="langsung upload ke YouTube kamu dengan privasi ini (lihat src/upload.py)")
     args = ap.parse_args()
-    for c in run(args.url, args.top, args.pool, args.effects, args.quick):
+    clips = run(args.url, args.top, args.pool, args.effects, args.quick)
+    for c in clips:
         print(f"  {c['file']}  {c['duration']:.0f}s  {c['layout']:<6}  {c['link']}  {c['title']}")
         print(f"      {c['text'][:110]}")
+    if args.upload and clips:
+        from src.ingest import fetch_metadata
+        from src.upload import upload_clips
+
+        log(f"upload {len(clips)} clip ({args.upload})")
+        upload_clips(fetch_metadata(args.url)["id"], args.upload, log=log)
 
 
 if __name__ == "__main__":
